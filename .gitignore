@@ -1,0 +1,8 @@
+# Testing/debug files on Owen's machine:
+def_test.sh
+st_in
+std_in
+# Example files, to be replaced with better examples, in more clear notation, later in the process (also on Owen's machine):
+results.tex
+output/results_edit.tex
+output/results_diff.tex
