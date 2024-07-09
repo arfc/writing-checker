@@ -2,6 +2,7 @@
 def_test.sh
 st_in
 std_in
+elements.csv:Zone.Identifier # local WSL information about elements.csv 
 # Example files, to be replaced with better examples, in more clear notation, later in the process (also on Owen's machine):
 results.tex
 output/results_edit.tex
