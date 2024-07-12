@@ -32,33 +32,21 @@ touch $output_diff
 elemcsv="elements.csv"
 atom_symbs=$(awk -F ',' '{if (NR>1) {print $3,"\\|"}}' $elemcsv | tr -d '\n' | tr -d ' ' | sed s/..$//g)
 atom_names=$(awk -F ',' '{if (NR>1) {print $2,"\\|"}}' $elemcsv | tr -d '\n' | tr -d ' ' | sed s/..$//g)
-#atom_names_to_symbs=$(awk -F ',' '{if (NR>1) {print "-e \"s/",$2,"\\([ -].[0-9].\\)/",$3,"\\1/gI\""}}' elements.csv | tr -d ' ' | sed "s/-e/ -e /g" | sed "s/\[-/\[ -/g" | tr -d "\n") #One giant set of sed expressions -e "..." -e "..." that replace elemental names with symbols
 atom_names_to_symbs="$(awk -F ',' '{if (NR<5) {print ";s/",$2,"\\([ -][0-9]\\)/",$3,"\\1/gI"}}' elements.csv | tr -d ' ' | sed "s/-e/ -e /g" | sed "s/\[-/\[ -/g" | tr -d "\n" | sed 's/$/\n/')" #Replace with one single sed argument (NOTE: this is insecure)
-# Define substitution command to hackishly take case into account
-function sedcap_old () {
-	local st_in="$(cat < /dev/stdin)"
-	#echo "${st_in}"
-	local pat=$1
-	#echo "pat: $pat"
-	local uppat=$(echo "$pat" | sed -e "s/\/\(.\)/\/\u\1/1" | sed -e "s/\//\/\\\u/2") 
-	#local uppat =<(echo "$pat" | sed -e "s/\/\(.\)/\/\u\1/1" | sed -e "s/\//\/\\\u/2") 
-	#echo "uppat: $uppat"
-	echo ${st_in} # | sed -e "$pat" -e "$uppat"
-}
 
+#Utility function to run the given (simple and starting with a letter) sed command twice: once as presented, and once where the first character of the pattern and the first character of the replacement have been capitalized. Intended to be run in a pipe, using BRE syntax.
+#Example: "sedcap 's/they're/they are/g' | " would be equivalent to running "sed 's/they're/they are/g' | sed 's/They're/They are/g'"
 function sedcap () {
 	sed -e "$1" -e "$(echo "$1" | sed -e "s/\/\(.\)/\/\u\1/1" | sed -e "s/\//\/\\\u/2")"
 }
 
+#Similar to sedcap, but for the use case of removing a pattern or capture group of words regardless of capitalization. Runs a sed replace twice on the given pattern, once removing the pattern and up to three spaces afterwards, then again ignoring case and capitalizing the next character after the pattern. Intended to be run in a pipe, using BRE syntax.
+#Example: "rmgroupcap 'very'" would replace "this is very good" with "this is good" and "end. Very often" with "end. Often"
 function rmgroupcap () { #Argument 1: the pattern to delete; will delete the pattern and then delete it again without case and capitalize the next character; Argument 2: the next capture group number (e.g. the expression "\(happen\(ed|s\)\?\)" has two groups so 3 would be given
 	#sed -e "s/$1//g" -e "s/$(echo "$1" | sed -e "s/\([(|]\)\(\\w\)/\1\\u\2/")\\b\(\\w\)/\$2/g"
 	sed -e "s/$1\\s\{1,3\}//g" | sed -e "s/$1\\s\{1,3\}\(\\w\)/\\u\\$2/gI"
 	
 }
-#rgctest="Foo bar bar. Bar foo bar. Foobar foo foo bar"
-#echo "$rgctest"
-#echo "$rgctest" | rmgroupcap "\(foo\|foobar\)" "2"
-#rmgroupcap "\(foo\|bar\|foobar\)"
 
 # Stream input from file
 cat $1 |
@@ -116,22 +104,11 @@ sed "s/\(he\|she\|it\)'s/\1 is/gi" | # [word]'s form contractions
 #Send final stream to full edit file file
 cat > $output_full
 
-#TODO: Send this to latexdiff script to flag differences
 #Run latexdiff to generate a new copy which demonstrates the changes actively made
 latexdiff "$1" "$output_full" > "$output_diff"
 
 
-#TODO: Part 2: Load either latexdiff or base edit file, then add highlights for suggestions which can't be automatically performed (e.g. it could identify that you use a word a lot, but it would be foolish for it to automatically thesaurus these words, that's for the writer to decide)
-
-# Define function to highlight a given regex pattern
-function hlpc () { #highlight pattern with color: uses sed to highlight instances in the standard input which match 1st parameter pattern
-	read std_in #Read standard input, i.e. for piping
-	
-	#Where the first parameter is a pattern, and the second command is a color/xcolor name, surrounds text in that color using color/xcolor latex syntax
-	echo "$std_in" | sed "s/\($1\)/\\colorbox{$2}{\1}/g"
-
-}
-
+# Part 2: Load either latexdiff or base edit file, then add highlights for suggestions which can't be automatically performed (e.g. it could identify that you use a word a lot, but it would be foolish for it to automatically thesaurus these words, that's for the writer to decide)
 
 to_highlight="$output_full" # Currently runs on the full output file, but we should be able to change this
 #echo "now highlighting: $to_highlight"
