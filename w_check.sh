@@ -61,7 +61,7 @@ sed "s/\(\(took\|take[sn]\?\) place\) on \([^.,]*\(century\|decade\|year\|month\
 	# 1c: duplicate words
 sed "s/\\b\(\\w\+\)\\s\+\1\\b/\1/g" |
 	# 1d: Muddling words like "quite, various, a number of" that don't really clarify anything
-rmgroupcap "\(various\|a number of\|many\|quite\|a few\)" "2" | 
+rmgroupcap "\(various\|a number of\|many\|quite\|a few\|methodologic\(al\)\?\|important\)" "3" | 
 	# 1e: Improper isotopic notation
 sed "${atom_names_to_symbs}" | # Should be noted using symbol, not name
 sed ':repeat;s/^\(\([^$]*\$[^$]*\$\)\+[^$]*\)\([A-Z][a-z]\?[ -]\?[0-9]\{1,3\}\)/\1$\2#/g;t repeat' | # Make sure isotopes are in math mode
@@ -138,12 +138,12 @@ highlight "\\b[Vv]ery\\b"
 highlight "\\bnot\\b"
 # Need to test this more: it is designed to match verb + 1-3 words + of/for, and seems to work but still seems risky
 highlight "\(obtain\|provide\|secure\|allow\|enable\)\(s\|ed\)\?\( [^ .]*\)\{1,3\} \(of\|for\)"
-perl_hili "\\b(methodologic|important)\\b"
 
 hl_color="pink"
 #Only use large to refer to size
+
 if [ "$hasperl" = true ] ; then
-	highlight "large"
+	perl_hili "large"
 fi
 
 hl_color="violet"
