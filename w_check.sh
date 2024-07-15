@@ -86,11 +86,15 @@ sed "s/\([;:]\)\"/\"\1/g" |
 	# 1l: And then standard punctuation goes after the citaiton 
 sed "s/\"\([.;:?!]\)\(\\b\?\\\cite{[^{}]}\)/\"\2\1/g" | 
 	# 1m: Oxford comma (last item in comma separated list without comma before the and)
-sed "s/\(\(,[^.,;]\+\)\{2,\}\) and/\1, and/g" |
+sed "s/\(\(,[^.,;]\+\)\{2,\}\) and/\1, and/g" | #TODO: should this be left to highlighting
 	# 1n: Scientific notation should be in *10^whatever instead of ewhatever
 sed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" |
-	# 1o: Prefixes that should be hyphenated
-sed "s/\(pre\|post\|self\|all\|ex\) \(\\w\+\\b\)/\1-\2/g" |  
+	# 1o: Hyphens should join some prefixes to capitalized words/letters/figures, compound numbers, all words to prefixes ex self all, and the suffix elect
+sed "s/\(pre\|post\) \([A-Z0-9]\)/\1-\2/g" | # prefixes to capitalized words, figures, letters
+#sed "s/\(\\b[A-Za-z]\) \(\)"	| # Letters as prefixes (e.g. T-Cell) TODO: work out avoidance of regular letters like a, I, while still being broad enough to work
+sed "s/\(twenty\|thirty\|forty\|fifty\|sixty\|seventy\|eighty\|ninety\) \(one\|two\|three\|four\|five\|six\|seven\|eight\|nine\)/\1-\2/g" | # Compound numbers from 21 to 99
+sed "s/\(self\|all\|ex\) \(\\w\+\\b\)/\1-\2/g" | # All words to prefixes ex self all  
+sed "s/\(\\b\\w\+\) elect/\1-elect/g" | # Words to suffix -elect
 	# 1p: Contractions should be avoided in technical writing
 sed "s/I'm/I am/gI" |
 sedcap "s/can't/can not/g" | 
@@ -98,7 +102,26 @@ sedcap "s/won't/will not/g" |
 sed "s/\(are\|is\|do\|should\|would\|could\|have\|had\|was\|were\)n't/\1 not/gI" | # [word]n't form contractions
 sed "s/\(they\|you\|we\)'re/\1 are/gI" | # [word]'re form contractions
 sed "s/\(he\|she\|it\)'s/\1 is/gi" | # [word]'s form contractions
-	# 1q:  
+	# 1q: Misspelled Latin abbreviations
+#sed 's/ eg\.\? / e\.g\. /g' | # e.g. needs both periods TODO: decide how necessary this is (i.e. spellcheckers exist), and add more
+	# 1r: Latin abbreviations viz., i.e., and e.g. should be preceded and followed by commas
+sed "s/,\?\(viz\.\|i\.e\.\|i\.e\.\),\?/,\1,/g" |
+	# 1s: Versus should always have a period (at least in American English)
+sed "s/vs[^\.]/vs./g" | 
+	# 1t: "and etc." is redundant since etc. stands for *et* cetera
+sed "s/and etc\./etc\./g" | 
+	# 1u: "et" in abbreviations should not have a period, since et is a whole word
+sed "s/ et\./ et/g" | #This SHOULD be fine, since I can't think of when you would end a sentence with et
+	# 1v: Some abbreviations, such as N.B., require capitalization | 
+to_cap=('N\.B\.' 'CV') #TODO: add any more of these, this could include lowercase 
+{for tc in ${to_cap[@]}; do #TODO: figure out how to get a loop working in a pipe, or refactor this entirely to not use pipes (such as with -i)
+	sed "s/$tc/$tc/gI" |
+done}
+	# 1w: full latin phrases other than et should generally be capitalized
+if [ "$hasperl" = true ]; then
+	perl -pe 's/(?<!\{\s+)(in (situ|vivo|vitro)|ab initio)(?!\s+\})/\\emph\{\1\}/g' |
+fi
+	#
 	
 
 #Send final stream to full edit file file
@@ -140,10 +163,16 @@ highlight "\\bnot\\b"
 highlight "\(obtain\|provide\|secure\|allow\|enable\)\(s\|ed\)\?\( [^ .]*\)\{1,3\} \(of\|for\)"
 
 hl_color="pink"
-#Only use large to refer to size
+#Only use "large" to refer to size
+highlight "large"
+#Only use "when" to refer to time, not for hypotheticals (try "if" instead)
+highlight "when"
+#Be careful using acronyms, to expand them the first time (TODO: list of common enough acronyms to ignore)
+highlight " \([A-Z][a-z]\?\.\?\)\{2,\} " #TODO: decide how separate acronyms have to be from other words
+#The Latin abbreviations cf., et al., and q.v. should not automatically have commas after them
+highlight "\(cf\|et al\|q\.v\)\.,"
 
 if [ "$hasperl" = true ] ; then
-	perl_hili "large"
 fi
 
 hl_color="violet"
@@ -175,5 +204,5 @@ hl_color="teal"
 #Title case hyphens: hyphen pairs where the first character is capitalized
 highlight "[A-Z][a-zA-Z0-9]*-[a-zA-Z0-9]*"
 
-
+#TODO: Do we want to provide command line summaries? E.g. how many different instances of punctuation were used, average sentence length, commonly used words?
 exit
