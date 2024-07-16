@@ -34,15 +34,26 @@ atom_symbs=$(awk -F ',' '{if (NR>1) {print $3,"\\|"}}' $elemcsv | tr -d '\n' | t
 atom_names=$(awk -F ',' '{if (NR>1) {print $2,"\\|"}}' $elemcsv | tr -d '\n' | tr -d ' ' | sed s/..$//g)
 atom_names_to_symbs="$(awk -F ',' '{if (NR<5) {print ";s/",$2,"\\([ -][0-9]\\)/",$3,"\\1/gI"}}' elements.csv | tr -d ' ' | sed "s/-e/ -e /g" | sed "s/\[-/\[ -/g" | tr -d "\n" | sed 's/$/\n/')" #Replace with one single sed argument (NOTE: this is insecure)
 
-#Utility function to run the given (simple and starting with a letter) sed command twice: once as presented, and once where the first character of the pattern and the first character of the replacement have been capitalized. Intended to be run in a pipe, using BRE syntax.
+#DEPRECATED: Utility function to run the given (simple and starting with a letter) sed command twice: once as presented, and once where the first character of the pattern and the first character of the replacement have been capitalized. Intended to be run in a pipe, using BRE syntax.
 #Example: "sedcap 's/they're/they are/g' | " would be equivalent to running "sed 's/they're/they are/g' | sed 's/They're/They are/g'"
-function sedcap () {
+function sedcap_DEP () {
 	sed -e "$1" -e "$(echo "$1" | sed -e "s/\/\(.\)/\/\u\1/1" | sed -e "s/\//\/\\\u/2")"
 }
+#Utility function which runs the given BRE sed command twice: once as given, and then once where case is ignored and the first character of the replacement string is highlighted. If the optional second argument contains 'd', the first parameter is instead treated as a BRE pattern, and the function builds a simple BRE sed command around it to replace it with the next character 1-4 spaces behind it. (Equivalent to running without ~"d" argument and with such a BRE sed command to delete the pattern in the first place)
+function sedcap () { #Argument 1: either a complete BRE sed command, or a BRE pattern in a mode such as 'd'; Argument 2 (optional, default 'none'): Flags to use for editing. Currently, if a 'd' is in this string, for example, the pattern is treated as only a BRE pattern, and wrapped in a basic sed command to replace that pattern with the first character up to three spaces afterwards.
+	pattern="$1"
+	mode="${2:-'none'}"
+	if [[ "$mode" =~ "[dD]" ]]; then
+		caps=$(echo $pattern | grep -c "\\\(") #Count the number of capture groups already there
+		((caps++)) #Go to the next available capture group
+		pattern="s/${pattern}\\s\{1,4\}\(.\)/\\$caps/g"
+	fi
+	sed -e "$pattern" -e "$(echo "$pattern" | sed -e "s/\(.\)$/\1I/g" | sed -e "s/\//\/\\\u/2")"
+}
 
-#Similar to sedcap, but for the use case of removing a pattern or capture group of words regardless of capitalization. Runs a sed replace twice on the given pattern, once removing the pattern and up to three spaces afterwards, then again ignoring case and capitalizing the next character after the pattern. Intended to be run in a pipe, using BRE syntax.
+#DEPRECATED: Similar to sedcap, but for the use case of removing a pattern or capture group of words regardless of capitalization. Runs a sed replace twice on the given pattern, once removing the pattern and up to three spaces afterwards, then again ignoring case and capitalizing the next character after the pattern. Intended to be run in a pipe, using BRE syntax.
 #Example: "rmgroupcap 'very'" would replace "this is very good" with "this is good" and "end. Very often" with "end. Often"
-function rmgroupcap () { #Argument 1: the pattern to delete; will delete the pattern and then delete it again without case and capitalize the next character; Argument 2: the next capture group number (e.g. the expression "\(happen\(ed|s\)\?\)" has two groups so 3 would be given
+function rmgroupcap_DEP () { #Argument 1: the pattern to delete; will delete the pattern and then delete it again without case and capitalize the next character; Argument 2: the next capture group number (e.g. the expression "\(happen\(ed|s\)\?\)" has two groups so 3 would be given
 	#sed -e "s/$1//g" -e "s/$(echo "$1" | sed -e "s/\([(|]\)\(\\w\)/\1\\u\2/")\\b\(\\w\)/\$2/g"
 	sed -e "s/$1\\s\{1,3\}//g" | sed -e "s/$1\\s\{1,3\}\(\\w\)/\\u\\$2/gI"
 	
@@ -61,7 +72,7 @@ sed "s/\(\(took\|take[sn]\?\) place\) on \([^.,]*\(century\|decade\|year\|month\
 	# 1c: duplicate words
 sed "s/\\b\(\\w\+\)\\s\+\1\\b/\1/g" |
 	# 1d: Muddling words like "quite, various, a number of" that don't really clarify anything
-rmgroupcap "\(various\|a number of\|many\|quite\|a few\|methodologic\(al\)\?\|important\)" "3" | 
+sedcap "\(various\|a number of\|many\|quite\|a few\|methodologic\(al\)\?\|important\)" "d" | 
 	# 1e: Improper isotopic notation
 sed "${atom_names_to_symbs}" | # Should be noted using symbol, not name
 sed ':repeat;s/^\(\([^$]*\$[^$]*\$\)\+[^$]*\)\([A-Z][a-z]\?[ -]\?[0-9]\{1,3\}\)/\1$\2#/g;t repeat' | # Make sure isotopes are in math mode
