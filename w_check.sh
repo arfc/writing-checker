@@ -39,7 +39,7 @@ atom_names_to_symbs="$(awk -F ',' '{if (NR<5) {print ";s/",$2,"\\([ -][0-9]\\)/"
 function sedcap_DEP () {
 	sed -e "$1" -e "$(echo "$1" | sed -e "s/\/\(.\)/\/\u\1/1" | sed -e "s/\//\/\\\u/2")"
 }
-#Utility function which runs the given BRE sed command twice: once as given, and then once where case is ignored and the first character of the replacement string is highlighted. If the optional second argument contains 'd', the first parameter is instead treated as a BRE pattern, and the function builds a simple BRE sed command around it to replace it with the next character 1-4 spaces behind it. (Equivalent to running without ~"d" argument and with such a BRE sed command to delete the pattern in the first place)
+#Utility function which runs the given BRE sed command twice: once as given, and then once where case is ignored and the first character of the replacement string is capitalized. If the optional second argument contains 'd', the first parameter is instead treated as a BRE pattern, and the function builds a simple BRE sed command around it to replace it with the next character 1-4 spaces behind it. (Equivalent to running without ~"d" argument and with such a BRE sed command to delete the pattern in the first place)
 function sedcap () { #Argument 1: either a complete BRE sed command, or a BRE pattern in a mode such as 'd'; Argument 2 (optional, default 'none'): Flags to use for editing. Currently, if a 'd' is in this string, for example, the pattern is treated as only a BRE pattern, and wrapped in a basic sed command to replace that pattern with the first character up to three spaces afterwards.
 	pattern="$1"
 	mode="${2:-'none'}"
