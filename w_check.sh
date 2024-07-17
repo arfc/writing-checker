@@ -59,6 +59,39 @@ function rmgroupcap_DEP () { #Argument 1: the pattern to delete; will delete the
 	
 }
 
+#Utility function and corresponding data which collects patterns to highlight. Highlighting is performed later by surrounding matches of such patterns with \colorbox{}{} from the LaTeX package xcolor #TODO: ensure xcolor is installed in the head LaTeX document when addding LaTeX traversal capability
+to_highlight=() #List of patterns and colors to highlight; '%' alone precedes a color, as the program neither can nor should highlight LaTeX source code comments. '%#' precedes a mode specification, i.e. '%#E' signals that the following phrase uses ERE, or likewise '%#P' for PCRE. Such '%' specifiers only affect the next pattern, e.g., a pattern immediately after another pattern will be treated as BRE and highlighted in red
+function hladd () { #Argument 1: The pattern to highlight; Options/flags: -c <color> specifies an xcolor color to use, -E specifies to use ERE, -P to use PCRE. -B to use BRE (redundant)
+	if [ "$1" = "" ] ; then
+		echo "Error: pattern to highlight must be specified"
+	fi	
+	local OPTIND OPTARG #Reset option flag counter
+	OPSTRING=":c:PE" #Allow flags c with arg, P or E without
+	while getopts ${OPTSTRING} opt; do
+		case ${opt} in
+			c) #Set the highlight
+				to_highlight+=("%${OPTARG}")
+				;;
+			P) #Use PCRE instead of BRE
+				to_highlight+=('%#P')
+				;;
+			E) #Use ERE insread of BRE
+				to_highlight+=('%#E')
+				;;
+			:)
+                                echo "Option -${OPTARG} requires an argument."
+                                exit 1
+                                ;;
+                        ?)
+                                echo "Invalid option: -${OPTARG}."
+				exit 1
+                                ;;
+		esac
+	done
+	#Add pattern to list of patterns to highlight
+       	to_highlight+=("$1")	
+}
+
 # Stream input from file
 cat $1 |
 # Part 1: Execute tweaks which can be automatically performed 
@@ -215,5 +248,38 @@ hl_color="teal"
 #Title case hyphens: hyphen pairs where the first character is capitalized
 highlight "[A-Z][a-zA-Z0-9]*-[a-zA-Z0-9]*"
 
+hl_color='red' #Red by default
+mode='B' #BRE by default
+#Iterate through each highlight instruction
+for instr in "${to_highlight[@]}"
+do
+	if [ "$instr" =~ '^%'] ; then #Some kind of special isntruction like color or mode
+		if [ "$instr" =~ '^%#'] ; then #Specifically a mode instructor
+			mode="${instr#'%#'}"
+		else #Otherwise, a color instruction
+			hl_color="${instr#'%'}"
+		fi
+	else # If not a special instruction, then the pattern to highlight
+		case "${mode}" in
+			[bB]) #BRE
+				sed -i "s/\($1\)/\\\colorbox{$hl_color}{\1}/g$2" "$to_highlight"
+				;;
+			[pP]) #PCRE
+				perl -i -pe "s/($1)/\\\colorbox\{$hl_color\}\{\1\}/g$2" "$to_highlight"
+				;;
+			[eE]) #ERE
+				sed -iE "s/($1)/\\\colorbox\{$hl_color\}\{\1\}/g$2" "$to_highlight"
+				;;
+		esac
+		#Reset to default color and mode
+		hl_color='red'
+		mode='B'
+	fi	
+done
+
+
 #TODO: Do we want to provide command line summaries? E.g. how many different instances of punctuation were used, average sentence length, commonly used words?
+
+
+
 exit
