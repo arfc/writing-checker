@@ -23,7 +23,8 @@ echo "$base_name"
 output_full="output/${base_name}_edit.tex"
 output_diff="output/${base_name}_diff.tex"
 
-touch $output_full
+#touch $output_full
+cp "$base_name" "$output_full" #Make a copy of the input file in the full edit directory
 touch $output_diff
 
 # Define utility data
@@ -50,7 +51,33 @@ function sedcap () { #Argument 1: either a complete BRE sed command, or a BRE pa
 	fi
 	sed -e "$pattern" -e "$(echo "$pattern" | sed -e "s/\(.\)$/\1I/g" | sed -e "s/\//\/\\\u/2")"
 }
-
+#Shorthand to run the given sed command, in the current document, and with the option to try to preserve capitalization.
+function insed () { #Argument 1: The sed command to run; Available flags: -P and -E to use PCRE or ERE, respectively (-B specifies BRE, which is redundant), -d or D to interpret Argument 1 as simply a pattern, and construct one of two sed commands to delete it (-d only deleted, and -D deletes by replacing with the first character up to 4 spacs later. -D is more likely, because of situations where you want to delete an entire word, and likely want to preserve capitalization). Assumes '/' as the delimiter 
+	###  The pattern to operate with
+	pattern="$1"
+	###  Parse arguments
+	#First, de
+	#Determine RE mode
+	re_mode='B' #By default, basic
+	local OPTIND OPTARG #Reset options flag index
+	OPTSTRING=":PEB"
+	while getopts ${OPTSTRING} opt; do
+		case ${opt} in
+			B) re_mode='B';; #BRE
+			E) re_mode='E';; #ERE
+			P) re_mode='P';; #PCRE		
+			C) # Double up the sed command to capitalize the replacement
+				pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1I/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
+		esac
+	done
+	
+	# Run the final pattern, with the desired RE engine
+	case ${re_mode} in
+		B)sed -i -e "$pattern" "${output_full}";; #BRE
+		E)sed -iE -e "$pattern" "${output_full}";; #ERE
+		P)perl -i -p -e "$pattern" "${output_full}";; #PCRE
+	esac
+}
 #DEPRECATED: Similar to sedcap, but for the use case of removing a pattern or capture group of words regardless of capitalization. Runs a sed replace twice on the given pattern, once removing the pattern and up to three spaces afterwards, then again ignoring case and capitalizing the next character after the pattern. Intended to be run in a pipe, using BRE syntax.
 #Example: "rmgroupcap 'very'" would replace "this is very good" with "this is good" and "end. Very often" with "end. Often"
 function rmgroupcap_DEP () { #Argument 1: the pattern to delete; will delete the pattern and then delete it again without case and capitalize the next character; Argument 2: the next capture group number (e.g. the expression "\(happen\(ed|s\)\?\)" has two groups so 3 would be given
