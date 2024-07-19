@@ -53,28 +53,65 @@ function sedcap () { #Argument 1: either a complete BRE sed command, or a BRE pa
 }
 #Shorthand to run the given sed command, in the current document, and with the option to try to preserve capitalization.
 function insed () { #Argument 1: The sed command to run; Available flags: -P and -E to use PCRE or ERE, respectively (-B specifies BRE, which is redundant), -d or D to interpret Argument 1 as simply a pattern, and construct one of two sed commands to delete it (-d only deleted, and -D deletes by replacing with the first character up to 4 spacs later. -D is more likely, because of situations where you want to delete an entire word, and likely want to preserve capitalization). Assumes '/' as the delimiter 
-	###  The pattern to operate with
-	pattern="$1"
+	### Defaults
+	re_mode='B' #By default, assume BRE sed
+	to_build='N' #'N' for no build necessary, 'd' to build a delete command around the pattern, 'D' to build a command that replaces the given pattern with the next character up to four spaces later
+	capital=false #Whether to double up the pattern to capitalize (performed last)
+
 	###  Parse arguments
-	#First, de
-	#Determine RE mode
-	re_mode='B' #By default, basic
 	local OPTIND OPTARG #Reset options flag index
-	OPTSTRING=":PEB"
+	OPTSTRING=":dDPEBC"
 	while getopts ${OPTSTRING} opt; do
-		case ${opt} in
+		case ${opt} in 
+			d) to_build='d';;# Take input as pattern, and simply delete
+			D) to_build='D';;#Take input as pattern, and replace with next character up to 4 spaces away
 			B) re_mode='B';; #BRE
 			E) re_mode='E';; #ERE
 			P) re_mode='P';; #PCRE		
-			C) # Double up the sed command to capitalize the replacement
-				pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1I/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
+			C) capital=true;; # Double up the sed command to capitalize the replacement
 		esac
 	done
+	
+	shift $((OPTIND - 1))
+	###  The pattern to operate with
+	pattern="$1"
+	
+	# Build a command if the input needs to be completed
+	case ${to_build} in
+		N) # No build neceessary
+			;;
+		d) # Build basic delete command 
+			pattern="s/${pattern}//g"
+			;;
+		D) # Build delete command that actively finds a character up to 4 spaces later, and replaces the pattern with that (e.g. to allow capitalizing that character)
+			if [[ "${re_mode}" =~ 'B' ]] ; then # Which characters to use to wrap depends on whether using BRE or ERE/PCRE, since escape behavior is reversed
+				capstart='\('
+				numstart='\{'
+				capend='\)'
+				numend='\}'
+		       	else
+		 		capstart='('
+				numstart='{'
+				capend=')'
+				numend='}'
+			fi		
+			capsearch="\\${capstart}"
+			caps=$(echo "$pattern" | grep -c "${capsearch}") #Count the number of capture groups already there
+			((caps++)) #Go to the next available capture group
+			pattern="s/${pattern}\\s${numstart}1,4${numend}${capstart}.${capend}/\\$caps/g"
+			;;
+	esac
+
+	# Duplicate command to attempt to preserve capitalization
+	if [ "$capital" == "true" ] ; then
+		pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1i/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
+	fi
+
 	
 	# Run the final pattern, with the desired RE engine
 	case ${re_mode} in
 		B)sed -i -e "$pattern" "${output_full}";; #BRE
-		E)sed -iE -e "$pattern" "${output_full}";; #ERE
+		E)sed -i -E -e "$pattern" "${output_full}";; #ERE
 		P)perl -i -p -e "$pattern" "${output_full}";; #PCRE
 	esac
 }
