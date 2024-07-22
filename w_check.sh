@@ -24,7 +24,7 @@ output_full="output/${base_name}_edit.tex"
 output_diff="output/${base_name}_diff.tex"
 
 #touch $output_full
-cp "$base_name" "$output_full" #Make a copy of the input file in the full edit directory
+cp "$base_name.tex" "$output_full" #Make a copy of the input file in the full edit directory
 touch $output_diff
 
 # Define utility data
@@ -107,7 +107,7 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 		pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1i/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
 	fi
 
-	
+	#echo "final pattern: $pattern"	
 	# Run the final pattern, with the desired RE engine
 	case ${re_mode} in
 		B)sed -i -e "$pattern" "${output_full}";; #BRE
@@ -126,11 +126,8 @@ function rmgroupcap_DEP () { #Argument 1: the pattern to delete; will delete the
 #Utility function and corresponding data which collects patterns to highlight. Highlighting is performed later by surrounding matches of such patterns with \colorbox{}{} from the LaTeX package xcolor #TODO: ensure xcolor is installed in the head LaTeX document when addding LaTeX traversal capability
 to_highlight=() #List of patterns and colors to highlight; '%' alone precedes a color, as the program neither can nor should highlight LaTeX source code comments. '%#' precedes a mode specification, i.e. '%#E' signals that the following phrase uses ERE, or likewise '%#P' for PCRE. Such '%' specifiers only affect the next pattern, e.g., a pattern immediately after another pattern will be treated as BRE and highlighted in red
 function hladd () { #Argument 1: The pattern to highlight; Options/flags: -c <color> specifies an xcolor color to use, -E specifies to use ERE, -P to use PCRE. -B to use BRE (redundant)
-	if [ "$1" = "" ] ; then
-		echo "Error: pattern to highlight must be specified"
-	fi	
 	local OPTIND OPTARG #Reset option flag counter
-	OPSTRING=":c:PE" #Allow flags c with arg, P or E without
+	OPTSTRING=":c:PE" #Allow flags c with arg, P or E without
 	while getopts ${OPTSTRING} opt; do
 		case ${opt} in
 			c) #Set the highlight
@@ -155,7 +152,10 @@ function hladd () { #Argument 1: The pattern to highlight; Options/flags: -c <co
 
 	shift $(($OPTIND - 1))
 	#Add pattern to list of patterns to highlight
-       	to_highlight+=("$1")	
+	if [ "$1" = "" ] ; then
+		echo "Error: pattern to highlight must be specified"
+	fi	
+       	to_highlight+=("$1")
 }
 # Style guide & highlight colors: 
 #  - red for things that should be removed, but can't automatically do so
@@ -176,8 +176,8 @@ insed -C "s/it \(follows\|can be shown\|seems\|seems reasonable\|is evident\|is 
 	# 1c: Get rid of there are/there is
 hladd -c "$delete" "there is\|there are\|there exists\?\|there \(can\|may\) be"
 	# 1d: Extraneous prepositions
-sed "s/\(happen\|occur[r]\?\(ed\|s\)\?\) on \([^.,]*\(century\|decade\|year\|month\|week\|day\|hour\|minute\|second\)\)/\1 \3/gI" #Happens on a time 
-sed "s/\(\(took\|take[sn]\?\) place\) on \([^.,]*\(century\|decade\|year\|month\|week\|day\|hour\|minute\|second\)\)/\1 \3/gI" #Takes place on a time, irregular construction
+insed "s/\(happen\|occur[r]\?\(ed\|s\)\?\) on \([^.,]*\(century\|decade\|year\|month\|week\|day\|hour\|minute\|second\)\)/\1 \3/gI" #Happens on a time 
+insed "s/\(\(took\|take[sn]\?\) place\) on \([^.,]*\(century\|decade\|year\|month\|week\|day\|hour\|minute\|second\)\)/\1 \3/gI" #Takes place on a time, irregular construction
 	# 1e: Get rid of passive voice constructions
 # Initial word list is from Matt Might's shell scripts, not sure what licensing there is for compiled lists of words
 irreg=$(cat "irregular_passive_verbs.txt")
@@ -228,9 +228,9 @@ insed "s/\(${atom_symbs}\)[ -]\([0-9]\{1,3\}\)/^{\2}\1/g" #Isotope upper left of
 insed ':repeat;s/^\(\([^$]*\$[^$]*\$\)*[^$]*\)\(\^{[0-9]\{1,3\}}[ ]\?[A-Z][a-z]\)/\1$\3$/g;t repeat'  # Put any isotopic notation we just created into an equation environment
 	# 3h: Strengthen your verbs (use sparingly: is, are, was, were, be, been, am) (Redundant: covered by 1e)
 	# 3i: Only use 'large' when referring to size (TODO: improve with perl lookeaheads)
-insed -c "$posdel" "large"
+hladd -c "$posdel" "large"
 	# 3j: Do not use the word "when" unless referring to a time (try 'if' instead). (TODO: improve with perl lookaheads)
-insed -c "$posdel" "when"
+hladd -c "$posdel" "when"
 	# 3k: Clarify or change misused/overused words where necessary (e.g., code, input, output, different, value, amount, model). (OOS: Define list of misused or overused words)
 	# 3l: Each sentence/paragraph should logically follow the previous sentence/paragraph. (OOS: Grammar/language processing)
 	# 3m: Examples should use variables instead of numbers and symbolic math instead of acronyms (OOS: universally identifying such references)
@@ -313,17 +313,18 @@ hladd -c "$restruct" "_{[^{}]}"
 	# 8d: The notation `$3.0\times10^{12}$` is preferred over `$3e12$`.
 insed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" 
 	# 8e: Equations should be part of a sentence.
-sed -e "s/\(\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}\)\(*\)\(\\\end{\2\)/\1\\\colorbox{$hl_color}{\$\\\displaystyle \3\$}\4/g" -i ${to_highlight} #Special highlight needed to respect math environment; this highlights equations which come right after a period
+hl_color='brown'
+insed "s/\(\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}\)\(*\)\(\\\end{\2\)/\1\\\colorbox{$hl_color}{\$\\\displaystyle \3\$}\4/g" #Special highlight needed to respect math environment; this highlights equations which come right after a period
 	# 8f: Equations should be in the `align` environment. Align them at the `=` sign.
-sed -e "s/\(\.[!.]*\.\)\(\\b\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}\)\(*\)\(\\\end{\3\)/\\\colorbox{$hl_color}{\1}\2\\\colorbox{$hl_color}{\$\\\displaystyle \4\$}\5/g" -i ${to_highlight} #Special highlight needed to respect math environment; this highlights equations which come right after a period
+insed "s/\(\.[!.]*\.\)\(\\b\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}\)\(*\)\(\\\end{\3\)/\\\colorbox{$hl_color}{\1}\2\\\colorbox{$hl_color}{\$\\\displaystyle \4\$}\5/g" #Special highlight needed to respect math environment; this highlights equations which come right after a period
 	# 8g: Variables should be defined in the 'align' environment, not buried in paragraphs (OOS: identifying variables)
 
-
+echo "Running latexdiff:"
 
 ## Run latexdiff to generate a new copy which demonstrates the changes actively made
 latexdiff "$1" "$output_full" > "$output_diff"
 
-
+echo "Running highlights:"
 ## Apply highlights to the diff file
 
 to_highlight="$output_diff"
@@ -332,7 +333,7 @@ mode='B' #BRE by default
 #Iterate through each highlight instruction
 for instr in "${to_highlight[@]}"
 do
-	if [ "$instr" =~ '^%'] ; then #Some kind of special isntruction like color or mode
+	if [[ "$instr" =~ '^%' ]] ; then #Some kind of special isntruction like color or mode
 		if [ "$instr" =~ '^%#'] ; then #Specifically a mode instructor
 			mode="${instr#'%#'}"
 		else #Otherwise, a color instruction
