@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Ensure file was provided
-if [ "$1" = "" ]; then
- echo "usage: `basename $0` <file> ..."
- exit
-fi
+#if [ "$1" = "" ]; then
+# echo "usage: `basename $0` <file> ..."
+# exit
+#fi
 
 # Check if perl is installed; this only affects a couple of things that use lookaheads
 hasperl=false
@@ -19,13 +19,54 @@ fi
 base_name=$(echo $1 | sed s/"\.tex$"//g)
 echo "$base_name"
 
+# Handle edits on a directory by directory basis. Files in the input directory will be copied to mirroring file locations in the directories output/edit and output/diff
+input_dir="input/" #Prefix for files which will be edited
+edit_dir="output/edit/" #Prefix for the fully edited files
+diff_dir="output/diff/" #Prefix for the files showing the changes and suggestions 
+
 # Identify output file names, one for the full edits and highlighted suggestions, and one for the latexdiff of the direct edits
 output_full="output/${base_name}_edit.tex"
 output_diff="output/${base_name}_diff.tex"
 
 #touch $output_full
-cp "$base_name.tex" "$output_full" #Make a copy of the input file in the full edit directory
-touch $output_diff
+echo "$edit_dir$(basename fingu/notresults.tex)"
+#find "$input_dir" -type f -exec sh -c 'echo ${edit_dir}$(echo $input_dir)' \; 
+files=$(find "$input_dir" -type f -exec echo {} \; | grep -v "Zone\.Identifier$" | sed "s%^$input_dir%%g")
+#echo "$texfiles"
+OIFS="$IFS"
+#while IFS=$'\n' read -ra FILES <<< "$texfiles"; do
+#	for file in "${FILES[@]}" ; do
+#		cp "${input_dir}${file}" "${edit_dir}${file}"
+#		echo "test hihi$file"
+#	done	
+#done
+#New approach that uses a loop inside the exec command in a way that might possibly solve this issue Update: this has the same expansion problem
+#find "$input_dir" -type f -exec sh -c '
+#	for file do
+#		echo "$file" | sed "s%^${input_dir}%%"
+#		echo \"$input_dir\"
+#	done
+#' exec-sh {} +
+
+#Third approach:
+while IFS= read -r line; do 
+	# Each line is a file address from the input dir
+	
+	# If it has its own new directories, create those as necessary
+	subdir=$(dirname "$line")
+	#echo "$subdir"
+	if [ "$subdir" != "" ] ; then
+		mkdir -p "$edit_dir$subdir"
+	fi
+
+	touch "$edit_dir$line"
+	cp "$input_dir$line" "$edit_dir$line"
+done <<< "$files"
+
+echo "just checked directory"
+
+#cp "$base_name.tex" "$output_full" #Make a copy of the input file in the full edit directory
+#touch $output_diff
 
 # Define utility data
 
@@ -90,13 +131,13 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 	if [ "$capital" == "true" ] ; then
 		pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1i/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
 	fi
-
+		
 	#echo "final pattern: $pattern"	
-	# Run the final pattern, with the desired RE engine
+	# Run the final pattern, with the desired RE engine, across the full edit directory TODO: 
 	case ${re_mode} in
-		B)sed -i -e "$pattern" "${output_full}";; #BRE
-		E)sed -i -E -e "$pattern" "${output_full}";; #ERE
-		P)perl -i -p -e "$pattern" "${output_full}";; #PCRE
+		B)find "$edit_dir" -type f -name "*.tex" -exec sed -i -e "$pattern" {} \; ;; #BRE
+		E)find "$edit_dir" -type f -name "*.tex" -exec sed -i -E -e "$pattern" {} \; ;; #ERE
+		P)find "$edit_dir" -type f -name "*.tex" -exec perl -i -p -e "$pattern" {} \; ;; #PCRE
 	esac
 }
 
@@ -299,41 +340,72 @@ insed "s/\(\.[!.]*\.\)\(\\b\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}
 echo "Running latexdiff:"
 
 ## Run latexdiff to generate a new copy which demonstrates the changes actively made
-latexdiff "$1" "$output_full" > "$output_diff"
+while IFS= read -r line; do 
+	# Each line is a file address from the input dir
+	
+	# If it has its own new directories, create those as necessary
+	subdir=$(dirname "$line")
+	#echo "$subdir"
+	if [ "$subdir" != "" ] ; then
+		mkdir -p "$diff_dir$subdir"
+	fi
+	
+	# Make the diff file if it's a tex file, otherwise just straight copy 
+	if [[ "$line" =~ .tex$ ]] 
+       	then
+		latexdiff "$input_dir$line" "$edit_dir$line" > "$diff_dir$line"
+		echo "Making diff for: $line"
+	else
+		cp "$input_dir$line" "$diff_dir$line"
+		echo "Copying: $line"
+	fi
+done <<< "$files"
+
+
+#latexdiff "$1" "$output_full" > "$output_diff"
+#find "${input_dir}" -name "*.tex" -exec sh -c 'latexdiff "{}" "$edit_dir$(basename {})" > "$diff_dir$(basename {})"'  \;
+#for file in "${texfiles[@]}"
+#do
+#	latexdiff "${input_dir}${file}" "${edit_dir}${file}" > "${diff_dir}${file}"
+#done
 
 echo "Running highlights:"
 ## Apply highlights to the diff file
 
-to_highlight="$output_diff"
+#to_highlight="$output_diff"
 hl_color='red' #Red by default
 mode='B' #BRE by default
 #Iterate through each highlight instruction
-for instr in "${to_highlight[@]}"
-do
-	if [[ "$instr" =~ '^%' ]] ; then #Some kind of special isntruction like color or mode
-		if [ "$instr" =~ '^%#'] ; then #Specifically a mode instructor
-			mode="${instr#'%#'}"
-		else #Otherwise, a color instruction
-			hl_color="${instr#'%'}"
-		fi
-	else # If not a special instruction, then the pattern to highlight
-		case "${mode}" in
-			[bB]) #BRE
-				sed -i "s/\($1\)/\\\colorbox{$hl_color}{\1}/g$2" "$to_highlight"
-				;;
-			[pP]) #PCRE
-				perl -i -pe "s/($1)/\\\colorbox\{$hl_color\}\{\1\}/g$2" "$to_highlight"
-				;;
-			[eE]) #ERE
-				sed -iE "s/($1)/\\\colorbox\{$hl_color\}\{\1\}/g$2" "$to_highlight"
-				;;
-		esac
-		#Reset to default color and mode
-		hl_color='red'
-		mode='B'
-	fi	
-done
-
+#for file in "${texfiles[@]}"
+#do
+#	diffile="${diff_dir}${file}"
+	for instr in "${to_highlight[@]}"
+	do
+		if [[ "$instr" =~ '^%' ]] ; then #Some kind of special isntruction like color or mode
+			if [ "$instr" =~ '^%#'] ; then #Specifically a mode instructor
+				mode="${instr#'%#'}"
+			else #Otherwise, a color instruction
+				hl_color="${instr#'%'}"
+			fi
+		else # If not a special instruction, then the pattern to highlight
+			#echo "$instr"
+			case "${mode}" in
+				[bB]) #BRE
+					find "$diff_dir" -type f -name "*.tex" -exec sed -i "s/\($instr\)/\\\colorbox{$hl_color}{\1}/g" {} \;
+					;;
+				[pP]) #PCRE
+					find "$diff_dir" -type f -name "*.tex" -exec perl -i -p -e "s/($instr)/\\\colorbox\{$hl_color\}\{\1\}/g" "$diffile"
+					;;
+				[eE]) #ERE
+					find "$diff_dir" -type f -name "*.tex" -exec sed -i -E "s/($instr)/\\\colorbox\{$hl_color\}\{\1\}/g" "$diffile"
+					;;
+			esac
+			#Reset to default color and mode
+			hl_color='red'
+			mode='B'
+		fi	
+	done
+#done
 
 #TODO: Do we want to provide command line summaries? E.g. how many different instances of punctuation were used, average sentence length, commonly used words?
 
