@@ -23,6 +23,10 @@ echo "$base_name"
 input_dir="input/" #Prefix for files which will be edited
 edit_dir="output/edit/" #Prefix for the fully edited files
 diff_dir="output/diff/" #Prefix for the files showing the changes and suggestions 
+# ensure the directories exist
+mkdir -p "$edit_dir" 
+mkdir -p "$diff_dir"
+
 
 # Identify output file names, one for the full edits and highlighted suggestions, and one for the latexdiff of the direct edits
 output_full="output/${base_name}_edit.tex"
