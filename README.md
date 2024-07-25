@@ -49,3 +49,9 @@ Thus, the script takes the form:
 3. Edit or prepare highlights to the documents for each checklist item
 4. Generate diff files between the original and edit using latexdiff
 5. Apply the prepared list of highlights to the diff files
+
+## Credits and other not
+
+Author: Owen Strong
+
+Inspired by Matt Might's [shell scripts](https://matt.might.net/articles/shell-scripts-for-passive-voice-weasel-words-duplicates/)
