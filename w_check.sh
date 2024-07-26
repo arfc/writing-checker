@@ -147,7 +147,7 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 
 #Utility function and corresponding data which collects patterns to highlight. Highlighting is performed later by surrounding matches of such patterns with \colorbox{}{} from the LaTeX package xcolor #TODO: ensure xcolor is installed in the head LaTeX document when addding LaTeX traversal capability
 to_highlight=() #List of patterns and colors to highlight; '%' alone precedes a color, as the program neither can nor should highlight LaTeX source code comments. '%#' precedes a mode specification, i.e. '%#E' signals that the following phrase uses ERE, or likewise '%#P' for PCRE. Such '%' specifiers only affect the next pattern, e.g., a pattern immediately after another pattern will be treated as BRE and highlighted in red
-function hladd () { #Argument 1: The pattern to highlight; Options/flags: -c <color> specifies an xcolor color to use, -E specifies to use ERE, -P to use PCRE. -B to use BRE (redundant)
+function hladd () { #Argument 1: The pattern to highlight, Argument 2 (optional): The note to add about the highlight; Options/flags: -c <color> specifies an xcolor color to use, -E specifies to use ERE, -P to use PCRE. -B to use BRE (redundant)
 	local OPTIND OPTARG #Reset option flag counter
 	OPTSTRING=":c:PE" #Allow flags c with arg, P or E without
 	while getopts ${OPTSTRING} opt; do
@@ -172,7 +172,14 @@ function hladd () { #Argument 1: The pattern to highlight; Options/flags: -c <co
 		esac
 	done
 
-	shift $(($OPTIND - 1))
+	shift $(($OPTIND - 1)) #Shift back to the arguments
+       	
+	#If there's a note, add that
+	if [[ "$2" != "" ]] ; then
+		echo "Adding note: $2"
+		to_highlight+=("%ㄋ$2")
+	fi
+
 	#Add pattern to list of patterns to highlight
 	if [ "$1" = "" ] ; then
 		echo "Error: pattern to highlight must be specified"
@@ -203,26 +210,27 @@ insed "s/\(\(took\|take[sn]\?\) place\) on \([^.,]*\(century\|decade\|year\|mont
 	# 1e: Get rid of passive voice constructions
 # Initial word list is from Matt Might's shell scripts, not sure what licensing there is for compiled lists of words
 irreg=$(cat "irregular_passive_verbs.txt")
-hladd -c "$passive" "\\b\(am\|are\|were\|being\|is\|been\|was\|be\)\\b\(\\w\+\|\($irreg\)\)\\b"
+hladd -c "$passive" "\\b\(am\|are\|were\|being\|is\|been\|was\|be\)\\b\(\\w\+\|\($irreg\)\)\\b" "1e: Get rid of passive voice constructions"
+
 	# 1f: Cite all images, methods, software, and empirical data (Out of scope)
 
 ## Section 2: Enhancing clarity
 	# 2a: Be concise and direct (Out of Scope)
 	# 2b: Using "very" suggest that a better word exists; replace it where possible
-hladd "\\b[Vv]ery\\b"
+hladd "\\b[Vv]ery\\b" "2b: Using 'very' suggest that a better word exists; replace it where possible"
 	# 2c: Make sure that articles such as a, the, some, any, and each appear where necessary (Out of Scope: define where is necessary)
 	# 2d: Ensure all subjects match the plurality of their verbs ("Apples is tasty" to "Apples are tasty") (Not Yet in Scope: define plurals)
 	# 2e: Recover noun-ified verbs ('obtain estimates of' -> 'estimates')
-hladd -c "$passive" "\(obtain\|provide\|secure\|allow\|enable\)\(s\|ed\)\?\( [^ .]*\)\{1,3\} \(of\|for\)"
+hladd -c "$passive" "\(obtain\|provide\|secure\|allow\|enable\)\(s\|ed\)\?\( [^ .]*\)\{1,3\} \(of\|for\)" "2e: Recover noun-ified verbs ('obtain estimates of' -> 'estimates')" 
 	# 2f: Use the form <noun> <verb>ion over <verb>ion of <noun> (for example, convert "calculation of velocity" to "velocity calculation").
-hladd -c "$passive" "[a-z]ion of\\b"
+hladd -c "$passive" "[a-z]ion of\\b" "2f: Use the form <noun> <verb>ion over <verb>ion of <noun> (for example, convert 'calculation of velocity' to 'velocity calculation')." 
 	# 2g: Reduce vague words like important or methodologic (TODO: Add more such salt and pepper words)
 insed -CD "\(various\|a number of\|many\|quite\|a few\|methodologic\(al\)\?\|important\)" 
 	# 2h: Reduce acronyms/jargon
-hladd -c "$misuse" " \([A-Z][a-z]\?\.\?\)\{2,\} " #TODO: decide how separate acronyms have to be from other words
+hladd -c "$misuse" " \([A-Z][a-z]\?\.\?\)\{2,\} " "2h: Reduce acronyms/jargon" #TODO: decide how separate acronyms have to be from other words
 	# 2i: Expand all acronyms on first use (Out of Scope: at most, would specially highlight the first one)
 	# 2j: Turn negatives into positives (she was not often right -> she was usually wrong)
-hladd -c "$passive" "\\bnot\\b"
+hladd -c "$passive" "\\bnot\\b" "2j: Turn negatives into positives (she was not often right -> she was usually wrong)" 
 	# 2k: Do not bury the verb, keep predicate close to subject at start of sentence (Out of Scope: Process and interpret grammar)
 	# 2l: Refer to software consistently by name (TODO: Recognize and highlight generic references to 'the software')
 	# 2m: Italicize unusual or unfamiliar words of phrases when you use them (OOS: Would require grammar/frequency processing)
@@ -241,7 +249,7 @@ insed -C "s/\(he\|she\|it\)'s/\1 is/gi" # [word]'s form contractions
 	# 3d Follow the convention that the power to separate is (in order of increasing power): comma, colon, em dash, parentheses, semicolon, and period. (OOS: Diagnostics)
 	# 3e In increasing order of formality: dash, parentheses, all others. Do not overdo the em dash and parentheses. (OOS: Diagnostics)
 	# 3f Check that if there's a list in a sentence, it shouldn't come before the colon
-hladd -c "$restruct" "\.[^,.;]\+\(\(,[^,.;:]\+\)\{3,\}\|\(;[,.;:]\+\)\{2,\}\):"
+hladd -c "$restruct" "\.[^,.;]\+\(\(,[^,.;:]\+\)\{3,\}\|\(;[,.;:]\+\)\{2,\}\):" "3f Check that if there's a list in a sentence, it shouldn't come before the colon" 
 	# 3g Always use isotopic notation like '`$^{239}Pu$`. Never `$Pu-239$` or `$plutonium-239$`.'
 insed "${atom_names_to_symbs}" # Should be noted using symbol, not name TODO: review this, this seems misplaced
 insed ':repeat;s/^\(\([^$]*\$[^$]*\$\)\+[^$]*\)\([A-Z][a-z]\?[ -]\?[0-9]\{1,3\}\)/\1$\2#/g;t repeat' # Make sure isotopes are in math mode
@@ -250,9 +258,9 @@ insed "s/\(${atom_symbs}\)[ -]\([0-9]\{1,3\}\)/^{\2}\1/g" #Isotope upper left of
 insed ':repeat;s/^\(\([^$]*\$[^$]*\$\)*[^$]*\)\(\^{[0-9]\{1,3\}}[ ]\?[A-Z][a-z]\)/\1$\3$/g;t repeat'  # Put any isotopic notation we just created into an equation environment
 	# 3h: Strengthen your verbs (use sparingly: is, are, was, were, be, been, am) (Redundant: covered by 1e)
 	# 3i: Only use 'large' when referring to size (TODO: improve with perl lookeaheads)
-hladd -c "$posdel" "large"
+hladd -c "$posdel" "large" "3i: Only use 'large' when referring to size" 
 	# 3j: Do not use the word "when" unless referring to a time (try 'if' instead). (TODO: improve with perl lookaheads)
-hladd -c "$posdel" "when"
+hladd -c "$posdel" "when" "3j: Do not use the word 'when' unless referring to a time (try 'if' instead)." 
 	# 3k: Clarify or change misused/overused words where necessary (e.g., code, input, output, different, value, amount, model). (OOS: Define list of misused or overused words)
 	# 3l: Each sentence/paragraph should logically follow the previous sentence/paragraph. (OOS: Grammar/language processing)
 	# 3m: Examples should use variables instead of numbers and symbolic math instead of acronyms (OOS: universally identifying such references)
@@ -268,12 +276,12 @@ insed "s/\(data\)\( \\w\+ly\)\? \(suggest\|demonstrate\|include\|prove\)s/\1\2 \
 insed "s/ \(${atom_symbs}\)\([ -]\)/ \\u\1\2/gI"  
 insed "s/\([^.]\{4\}\)\(${atom_names}\)/\1\\l\2/gI" #Detect end of sentence by presence of a period
 	# 4d: Do not use the word "where" unless referring to a location (try "such that," or "in which").
-hladd -c "$posdel" "where" # TODO: improve with lookaheads
+hladd -c "$posdel" "where" "4d: Do not use the word 'where' unless referring to a location (try 'such that' or 'in which')." # TODO: improve with lookaheads
 	# 4e: Avoid run-on sentences
 clauselen=75 #Things over this many characters are assumed to be full clauses and not just items in a list (or if it is, a list that could use refactoring)
-hladd -c "$restruct" "\.\([^.]\{$clauselen,\}[,;]\)\{3,\}[^.]*\." #More than 4 large clause sections in the same sentence
+hladd -c "$restruct" "\.\([^.]\{$clauselen,\}[,;]\)\{3,\}[^.]*\." "4e: Avoid run-on sentences" #More than 4 large clause sections in the same sentence
 maxsenlen=450 #Maximum recommended sentence length 
-hladd -c "$restruct" "\.[^.]\{$maxsenlen\}\." #Sheer character length
+hladd -c "$restruct" "\.[^.]\{$maxsenlen\}\." "4e: Avoid run-on sentences" #Sheer character length
 	# 4f: The preposition "of" shows belonging, relations, or references. The preposition "for" shows purpose, destination, amount, or recipients. They are not interchangeable. (OOS: grammar/language processing)
 	
 ## Section 5: Enhancing punctuation
@@ -288,7 +296,7 @@ insed "s/\([;:]\)\"/\"\1/g"
 insed "s/\(\(,[^.,;]\+\)\{2,\}\) and/\1, and/g" #TODO: should this be left to highlighting
 	# 5f: Use hyphens to join words acting as a single adjective before a noun (e.g., "well-known prankster"), not after a noun (e.g., "the prankster is well known"). (OOS: grammar provessing)
 	# 5g: Two words joined by a hyphen in title case should both be capitalized.
-hladd -c "$misuse" "[A-Z][a-zA-Z0-9]*-[a-zA-Z0-9]*"
+hladd -c "$misuse" "[A-Z][a-zA-Z0-9]*-[a-zA-Z0-9]*" "5g: Two words joined by a hyphen in title case should both be capitalized." 
 	# 5h: Hyphens join a prefix to a capitalized word, figure, or letter (e.g., pre-COVID, T-cell receptor, post-1800s); compound numbers (e.g., sixty-six); words to the prefixes ex, self, and all (e.g., ex-sitter, self-made, all-knowing); and words to the suffix elect (e.g., president-elect).
 insed "s/\(pre\|post\) \([A-Z0-9]\)/\1-\2/g" # prefixes to capitalized words, figures, letters
 #insed "s/\(\\b[A-Za-z]\) \(\)"	 # Letters as prefixes (e.g. T-Cell) TODO: work out avoidance of regular letters like a, I, while still being broad enough to work
@@ -302,7 +310,7 @@ insed "s/\"\([.;:?!]\)\(\\b\?\\\cite{[^{}]}\)/\"\2\1/g"
 	# 6a: The Latin abbreviations viz., i.e., and e.g. should all have commas before and after them (e.g., "We can classify a large star as a red giant, e.g., Stephenson 2-18").
 insed "s/,\?\(viz\.\|i\.e\.\|i\.e\.\),\?/,\1,/g" 
 	# 6b: The Latin abbreviations cf., et al., or q.v. should not automatically have commas after them.
-hladd -c "$posdel" "\(cf\|et al\|q\.v\)\.,"
+hladd -c "$posdel" "\(cf\|et al\|q\.v\)\.," "6b: The Latin abbreviations cf., et al., or q.v. should not automatically have commas after them."
 	# 6c: Versus should always have a period (at least in American English)
 insed "s/vs[^\.]/vs./g"
 	# 6d: "and etc." is redundant since etc. stands for *et* cetera
@@ -330,7 +338,7 @@ fi
 ## Section 8: Enhancing Math
 	# 8a: Define all variables with units. If unitless, indicate this is the case `$[-]$`. (OOS: universally identifying variables)
 	# 8b: Subscripts should be brief and can be avoided with common notation. For example, `$\dot{m}$` is better than `$m_f$` which is superior to `$m_{flow}$`.
-hladd -c "$restruct" "_{[^{}]}" 
+hladd -c "$restruct" "_{[^{}]}" "8b: Subscripts should be brief and can be avoided with common notation. For example, \`\$\dot{m}\$\` is better than \`\$m_f\$\` which is superior to \`\$m_{flow}\$\`."
 	# 8c: Variable names should be symbols rather than words `m` is better than `mass` and `\ksi` is better than `one_time_use_variable`. (OOS: identifying words that are variables)
 	# 8d: The notation `$3.0\times10^{12}$` is preferred over `$3e12$`.
 insed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" 
@@ -376,40 +384,49 @@ done <<< "$files"
 echo "Running highlights:"
 ## Apply highlights to the diff file
 
-#to_highlight="$output_diff"
+# Make ids out of combinations of zhuyin/bopomofo characters and armenian alphabet characters, because why on god's green earth would someone's paper specifically contain pairs of these
+hl_ids_bpmf='ㄅ ㄉ ㄓ ㄚ ㄞ ㄢ ㄦ ㄆ ㄊ ㄍ ㄐ ㄔ ㄗ ㄧ ㄛ ㄟ ㄣ ㄇ ㄋ ㄎ ㄑ ㄕ ㄘ ㄨ ㄜ ㄠ ㄤ ㄈ ㄌ ㄏ ㄒ ㄖ ㄙ ㄩ ㄝ ㄡ ㄥ'
+hl_ids_armn='ա բ գ դ ե զ է ը թ ժ ի լ խ ծ կ հ ձ ղ ճ մ յ ն շ ո չ պ ջ ռ ս վ տ ր ց ւ փ ք օ ֆ'
+
 hl_color='red' #Red by default
 mode='B' #BRE by default
+note='' #By default, no note to add
 #Iterate through each highlight instruction
-#for file in "${texfiles[@]}"
-#do
-#	diffile="${diff_dir}${file}"
-	for instr in "${to_highlight[@]}"
-	do
-		if [[ "$instr" =~ '^%' ]] ; then #Some kind of special isntruction like color or mode
-			if [ "$instr" =~ '^%#'] ; then #Specifically a mode instructor
-				mode="${instr#'%#'}"
-			else #Otherwise, a color instruction
-				hl_color="${instr#'%'}"
-			fi
-		else # If not a special instruction, then the pattern to highlight
-			#echo "$instr"
-			case "${mode}" in
-				[bB]) #BRE
-					find "$diff_dir" -type f -name "*.tex" -exec sed -i "s/\($instr\)/\\\colorbox{$hl_color}{\1}/g" {} \;
-					;;
-				[pP]) #PCRE
-					find "$diff_dir" -type f -name "*.tex" -exec perl -i -p -e "s/($instr)/\\\colorbox\{$hl_color\}\{\1\}/g" "$diffile"
-					;;
-				[eE]) #ERE
-					find "$diff_dir" -type f -name "*.tex" -exec sed -i -E "s/($instr)/\\\colorbox\{$hl_color\}\{\1\}/g" "$diffile"
-					;;
-			esac
-			#Reset to default color and mode
-			hl_color='red'
-			mode='B'
-		fi	
-	done
-#done
+for instr in "${to_highlight[@]}"
+do
+	#echo "$instr"
+	if [[ "$instr" =~ ^% ]] ; then #Some kind of special isntruction like color or mode
+		#echo "Special instruction: $instr"	
+		if [[ "$instr" =~ ^%# ]] ; then #Specifically a mode instructor
+			mode="${instr#'%#'}"
+		elif [[ "$instr" =~ ^%ㄋ ]] ; then #Specifically a note instructor
+			echo "Adding note: ${instr#'%ㄋ'}"
+			note="\\\footnote{Auto note, ${instr#'%ㄋ'}}" #If a note is specified, then build a footnote
+		else #Otherwise, a color instruction
+			hl_color="${instr#'%'}"
+		fi
+	else # If not a special instruction, then the pattern to highlight
+		#echo "$instr"
+		#echo "$note"
+		case "${mode}" in
+			[bB]) #BRE
+				find "$diff_dir" -type f -name "*.tex" -exec sed -i "s#\($instr\)#\\\colorbox{$hl_color}{\1}$note#g" {} \;
+				;;
+			[pP]) #PCRE
+				note=$(echo "$note" | sed 's/\([{}]\)/\\\1/g' ) #If not BRE, need to escape the brackets
+				find "$diff_dir" -type f -name "*.tex" -exec perl -i -p -e "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
+				;;
+			[eE]) #ERE
+				note=$(echo "$note" | sed 's/\([{}]\)/\\\1/g' ) #If not BRE, need to escape the brackets
+				find "$diff_dir" -type f -name "*.tex" -exec sed -i -E "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
+				;;
+		esac
+		#Reset to default color and mode
+		hl_color='red'
+		mode='B'
+		note=''
+	fi	
+done
 
 #TODO: Do we want to provide command line summaries? E.g. how many different instances of punctuation were used, average sentence length, commonly used words?
 
