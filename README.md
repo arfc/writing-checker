@@ -13,6 +13,10 @@ To use the script, clone the repository or download the files `w_check.sh`, `ele
 
 Then, make a subdirectory at the same level named `input`, and put the LaTeX source code you want to inspect into that directory. If you made a clone of the entire repository, there should already be an `input` directory, with an example document inside it. Remove the example if you want, and add your files to the input directory.
 
+Note: To view the highlights, ensure the package xcolor is used in the document, such as by declaring the following at the start of the main tex file:
+
+`\usepackage{xcolor}`
+
 When the target files are in the input directory, navigate to the main directory and run the script:
 
 `bash w_check.sh`
