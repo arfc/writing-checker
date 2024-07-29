@@ -1,5 +1,5 @@
 
-# The ARFC writing Autochecklist
+# The ARFC Writing Autochecklist (Name TBD)
 
 This repository contains the source code for an autochecklist, a bash script to edit LaTeX documents according to the group [writing checklist](https://arfc.github.io/manual/guides/writing/checklist/). This project is currenly in its early stages, and may see revision to its usage and form.
 
