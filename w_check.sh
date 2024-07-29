@@ -387,27 +387,49 @@ echo "Running highlights:"
 # Make ids out of combinations of zhuyin/bopomofo characters and armenian alphabet characters, because why on god's green earth would someone's paper specifically contain pairs of these
 hl_ids_bpmf='ㄅ ㄉ ㄓ ㄚ ㄞ ㄢ ㄦ ㄆ ㄊ ㄍ ㄐ ㄔ ㄗ ㄧ ㄛ ㄟ ㄣ ㄇ ㄋ ㄎ ㄑ ㄕ ㄘ ㄨ ㄜ ㄠ ㄤ ㄈ ㄌ ㄏ ㄒ ㄖ ㄙ ㄩ ㄝ ㄡ ㄥ'
 hl_ids_armn='ա բ գ դ ե զ է ը թ ժ ի լ խ ծ կ հ ձ ղ ճ մ յ ն շ ո չ պ ջ ռ ս վ տ ր ց ւ փ ք օ ֆ'
+read -ra bpmf_list <<< "$hl_ids_bpmf"
+read -ra armn_list <<< "$hl_ids_armn"
+num_bps=${#bpmf_list[@]}
+num_ars=${#armn_list[@]}
+# Parameter 1: Integer number of the ID to get
+function bpmf_armn_id () { # Reliable combination of a zhuyin and armenian character to make an ID that can be inserted into a document for later without tripping any further patterns
+        bp_idx=$(($1 / $num_bps))
+        ar_idx=$(($1 % $num_ars))
+	bpar_id="${bpmf_list[$bp_idx]}${armn_list[$ar_idx]}"
+	echo "$bpar_id"
+}
+
 
 hl_color='red' #Red by default
 mode='B' #BRE by default
 note='' #By default, no note to add
+
+#Save the final notes to do at the end, because text in notes could be mistaken for source text
+noteText_list=()
+next_noteText_idx=0
 #Iterate through each highlight instruction
 for instr in "${to_highlight[@]}"
 do
 	#echo "$instr"
-	if [[ "$instr" =~ ^% ]] ; then #Some kind of special isntruction like color or mode
+	if [[ "$instr" =~ ^% ]] ; then #Some kind of special instruction like color or mode
 		#echo "Special instruction: $instr"	
 		if [[ "$instr" =~ ^%# ]] ; then #Specifically a mode instructor
 			mode="${instr#'%#'}"
 		elif [[ "$instr" =~ ^%ㄋ ]] ; then #Specifically a note instructor
-			echo "Adding note: ${instr#'%ㄋ'}"
-			note="\\\footnote{Auto note, ${instr#'%ㄋ'}}" #If a note is specified, then build a footnote
+			next_noteText_idx=${#noteText_list[@]} #Because zero indexing, the next index for adding this note text is the current size of the list
+			echo "Adding at index $next_noteText_idx"
+			noteText="${instr#'%ㄋ'}" #Text of the note
+			id=$(bpmf_armn_id $next_noteText_idx) #Find the id for the index it'll be added at
+			noteText_list+=("$noteText") #Add the note text to the list (at that index)
+			echo "Adding note \"$noteText\" using identifier $id"
+			note="\\\footnote{$id}" #If a note is specified, then build a footnote using the temporary note ID
 		else #Otherwise, a color instruction
 			hl_color="${instr#'%'}"
 		fi
 	else # If not a special instruction, then the pattern to highlight
 		#echo "$instr"
 		#echo "$note"
+		#note=$(echo "$note" | sed "s/^#/\\\#/g;s/\([^\\]\)#/\1\\\#/g") #Since using hashtags as delimiters, make sure any hashtags in the note are escaped
 		case "${mode}" in
 			[bB]) #BRE
 				find "$diff_dir" -type f -name "*.tex" -exec sed -i "s#\($instr\)#\\\colorbox{$hl_color}{\1}$note#g" {} \;
@@ -426,6 +448,18 @@ do
 		mode='B'
 		note=''
 	fi	
+done
+
+#Replace each temporary identifier with the actual note
+num_notes=${#noteText_list[@]}
+for ((i=0;i<num_notes;i++)); do 
+	#Identify the text of the note, and the temporary id that corresponds to it
+	noteText="${noteText_list[$i]}"
+	temp_ID="$(bpmf_armn_id $i)"
+	#Find instances of that temporary id and replace with the original note text
+	noteText=$(echo "$noteText" | sed "s/^#/\\\#/g;s/\([^\\]\)#/\1\\\#/g") #Since using hashtags as delimiters, make sure any hashtags in the note are escaped
+	find "$diff_dir" -type f -name "*.tex" -exec sed -i "s#$temp_ID#$noteText#g" {} \; #Go through each file and replace instances of that id with the original text
+	echo "Replacing id $temp_ID with original text: $noteText"
 done
 
 #TODO: Do we want to provide command line summaries? E.g. how many different instances of punctuation were used, average sentence length, commonly used words?
