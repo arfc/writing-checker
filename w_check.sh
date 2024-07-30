@@ -69,16 +69,7 @@ done <<< "$files"
 
 echo "just checked directory"
 
-#cp "$base_name.tex" "$output_full" #Make a copy of the input file in the full edit directory
-#touch $output_diff
-
-# Define utility data
-
-# Elemental data
-elemcsv="elements.csv"
-atom_symbs=$(awk -F ',' '{if (NR>1) {print $3,"\\|"}}' $elemcsv | tr -d '\n' | tr -d ' ' | sed s/..$//g)
-atom_names=$(awk -F ',' '{if (NR>1) {print $2,"\\|"}}' $elemcsv | tr -d '\n' | tr -d ' ' | sed s/..$//g)
-atom_names_to_symbs="$(awk -F ',' '{if (NR<5) {print ";s/",$2,"\\([ -][0-9]\\)/",$3,"\\1/gI"}}' elements.csv | tr -d ' ' | sed "s/-e/ -e /g" | sed "s/\[-/\[ -/g" | tr -d "\n" | sed 's/$/\n/')" #Replace with one single sed argument (NOTE: this is insecure)
+# Define utility functions
 
 #Shorthand to run the given sed command, in the current document, and with the option to try to preserve capitalization.
 function insed () { #Argument 1: The sed command to run; Available flags: -P and -E to use PCRE or ERE, respectively (-B specifies BRE, which is redundant), -d or D to interpret Argument 1 as simply a pattern, and construct one of two sed commands to delete it (-d only deleted, and -D deletes by replacing with the first character up to 4 spacs later. -D is more likely, because of situations where you want to delete an entire word, and likely want to preserve capitalization). Assumes '/' as the delimiter 
@@ -251,11 +242,25 @@ insed -C "s/\(he\|she\|it\)'s/\1 is/gi" # [word]'s form contractions
 	# 3f Check that if there's a list in a sentence, it shouldn't come before the colon
 hladd -c "$restruct" "\.[^,.;]\+\(\(,[^,.;:]\+\)\{3,\}\|\(;[,.;:]\+\)\{2,\}\):" "3f Check that if there's a list in a sentence, it shouldn't come before the colon" 
 	# 3g Always use isotopic notation like '`$^{239}Pu$`. Never `$Pu-239$` or `$plutonium-239$`.'
-insed "${atom_names_to_symbs}" # Should be noted using symbol, not name TODO: review this, this seems misplaced
-insed ':repeat;s/^\(\([^$]*\$[^$]*\$\)\+[^$]*\)\([A-Z][a-z]\?[ -]\?[0-9]\{1,3\}\)/\1$\2#/g;t repeat' # Make sure isotopes are in math mode
-insed "s/\(${atom_symbs}\)[ -]\([0-9]\{1,3\}\)/^{\2}\1/g" #Isotope upper left of symbol, not symbol-isotope
-#sed 's/^\(\([^$]*\$[^$]*\$\)\+[^$]*\)\(\^{[0-9]\{1,3\}}${atom_symbs}\)/\1foo/g'
-insed ':repeat;s/^\(\([^$]*\$[^$]*\$\)*[^$]*\)\(\^{[0-9]\{1,3\}}[ ]\?[A-Z][a-z]\)/\1$\3$/g;t repeat'  # Put any isotopic notation we just created into an equation environment
+
+# Elemental data; should be parallel by index
+
+elemcsv="elements.csv"
+elem_symblist=$(awk -F ',' '{if (NR>1) {print $3}}' $elemcsv) #List of symbs separated by space
+read -r -a elem_symblist <<< "$elem_symblist" #Convert it to an array
+elem_namelist=$(awk -F ',' '{if (NR>1) {print $2}}' $elemcsv) #Likewise but for the names
+read -r -a elem_namelist <<< "$elem_namelist"
+for i in ${!elem_symblist[@]}; do # Iterate through each row of element data (symbol and name)
+	symb=${elem_symblist[$i]}
+	name=${elem_namelist[$i]}
+	#Substitute instances of element_name-number to element_symb-number
+	insed "s/$name\([ -][0-9]\{1,3\}\)/$symb\1/gI"
+	#Put instances of elemen_symb-number in proper isotopic notation ^{number}element_symb
+	insed "s/$symb[ -]\([0-9]\{1,3\}\)/^{\1}$symb/g"
+	#Put instances of isotopic notation into math mode
+	insed ":repeat;s/^\(\([^$]*\$[^$]*\$\)*[^$]*\)\(\^{[0-9]\{1,3\}}[ ]\?$symb\)/\1$\3$/g;t repeat"
+done
+
 	# 3h: Strengthen your verbs (use sparingly: is, are, was, were, be, been, am) (Redundant: covered by 1e)
 	# 3i: Only use 'large' when referring to size (TODO: improve with perl lookeaheads)
 hladd -c "$posdel" "large" "3i: Only use 'large' when referring to size" 
@@ -273,8 +278,22 @@ insed -C "s/this \([^ ]\+\\b\)\?data/these \1data/g" #"this (room for a word, an
 insed "s/\(data\)\( \\w\+ly\)\? \(suggest\|demonstrate\|include\|prove\)s/\1\2 \3/gI" #data + optional adverb + common verb in plural form
 	# 4b: Compare to (point out similarities between different things) vs. compared with (point out differences between similar things) (OOS: grammar/language processing)
 	# 4c: Elemental symbols (Ni, Li, Na, Pu) are capitalized, but their names are not (nickel, lithium, sodium, plutonium).
-insed "s/ \(${atom_symbs}\)\([ -]\)/ \\u\1\2/gI"  
-insed "s/\([^.]\{4\}\)\(${atom_names}\)/\1\\l\2/gI" #Detect end of sentence by presence of a period
+for i in ${!elem_symblist[@]}; do # iterate through each row of element data (symbol and name)
+	symb=${elem_symblist[$i]}
+        name=${elem_namelist[$i]}
+	#If the lowercase of the element isn't commonly used, replace any lowercase instances with capitalized
+	symb_with_other_uses=" He Be In Mg Co As Dy Bi Am No "
+       	symbs_are_words=" He Be In Mg As " 	
+	lower=$(echo "$symbs_are_words" | sed 's/^\([A-Z]\)/\l\1/g') #Get the lowercase form of the symbol
+	if [[ ! "$misread" =~ " $symb " ]]; then #If the lowercase isn't used as a word elsewhere, repplace standalone lowercase instnaces
+		insed "s/ $lower / $symb " #And replace instances of it with the symbol
+	fi
+	if [[ ! "$symb" == "Dy" ]]; then #Except for dy, which also appears in math environments
+		insed "s/}$lower/}$symb/g" # Replace instances that are right after a }, since these are likely math / symbols
+	fi
+	# Make sure only elements at the start of sentences are capitalized (period end of sentence)
+	insed -E "s/([^.]{4})$name/\1$name/gI"
+done
 	# 4d: Do not use the word "where" unless referring to a location (try "such that," or "in which").
 hladd -c "$posdel" "where" "4d: Do not use the word 'where' unless referring to a location (try 'such that' or 'in which')." # TODO: improve with lookaheads
 	# 4e: Avoid run-on sentences
