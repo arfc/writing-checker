@@ -16,21 +16,31 @@ if [ "$hasperl" = false ] ; then
 fi
 
 # Parse base file name
-base_name=$(echo $1 | sed s/"\.tex$"//g)
-echo "$base_name"
+#base_name=$(echo $1 | sed s/"\.tex$"//g)
+#echo "$base_name"
 
 # Handle edits on a directory by directory basis. Files in the input directory will be copied to mirroring file locations in the directories output/edit and output/diff
-input_dir="input/" #Prefix for files which will be edited
-edit_dir="output/edit/" #Prefix for the fully edited files
-diff_dir="output/diff/" #Prefix for the files showing the changes and suggestions 
+
+if [ ! "$1" == "" ]; then #If a filepath is specified, use that filepath instead
+	input_dir=$(echo "$1" | sed 's%\([^/]\)$%\1/%') #Ensure a / at the end
+	edit_dir=$(echo "$input_dir" | sed 's%/$%_output/edit/%') #Use <path>_output instead of output
+	diff_dir=$(echo "$input_dir" | sed 's%/$%_output/diff/%') 
+	echo "Copying from '$input_dir' to '$edit_dir' and '$diff_dir'"
+else #But by default, look for an "input" directory
+	input_dir="input/" #Prefix for files which will be edited
+	edit_dir="output/edit/" #Prefix for the fully edited files
+	diff_dir="output/diff/" #Prefix for the files showing the changes and suggestions 
+	echo "No input directory specified, copying from '$input_dir' to '$edit_dir' and '$diff_dir'"
+fi
+
 # ensure the directories exist
 mkdir -p "$edit_dir" 
 mkdir -p "$diff_dir"
 
 
 # Identify output file names, one for the full edits and highlighted suggestions, and one for the latexdiff of the direct edits
-output_full="output/${base_name}_edit.tex"
-output_diff="output/${base_name}_diff.tex"
+#output_full="output/${base_name}_edit.tex"
+#output_diff="output/${base_name}_diff.tex"
 
 #touch $output_full
 echo "$edit_dir$(basename fingu/notresults.tex)"
@@ -127,7 +137,7 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 		pattern="${pattern};$(echo "$pattern" | sed -e "s/\(.\)$/\1i/g" | sed -e "s/\//\/\\\u/2")" # In the copy of the pattern, append I to the string, and append \u to the second / (i.e. in front of the replacement) TODO: Now that this isn't stuck in a pipe, consider reworking this to properly try and capitalize the first letter of the pattern instead of just running for any capitalization
 	fi
 		
-	#echo "final pattern: $pattern"	
+	echo "final pattern: $pattern"	
 	# Run the final pattern, with the desired RE engine, across the full edit directory TODO: 
 	case ${re_mode} in
 		B)find "$edit_dir" -type f -name "*.tex" -exec sed -i -e "$pattern" {} \; ;; #BRE
@@ -284,9 +294,9 @@ for i in ${!elem_symblist[@]}; do # iterate through each row of element data (sy
 	#If the lowercase of the element isn't commonly used, replace any lowercase instances with capitalized
 	symb_with_other_uses=" He Be In Mg Co As Dy Bi Am No "
        	symbs_are_words=" He Be In Mg As " 	
-	lower=$(echo "$symbs_are_words" | sed 's/^\([A-Z]\)/\l\1/g') #Get the lowercase form of the symbol
+	lower=$(echo "$symb" | sed 's/^\([A-Z]\)/\l\1/g') #Get the lowercase form of the symbol
 	if [[ ! "$misread" =~ " $symb " ]]; then #If the lowercase isn't used as a word elsewhere, repplace standalone lowercase instnaces
-		insed "s/ $lower / $symb " #And replace instances of it with the symbol
+		insed "s/ $lower / $symb /g" #And replace instances of it with the symbol
 	fi
 	if [[ ! "$symb" == "Dy" ]]; then #Except for dy, which also appears in math environments
 		insed "s/}$lower/}$symb/g" # Replace instances that are right after a }, since these are likely math / symbols
@@ -306,7 +316,7 @@ hladd -c "$restruct" "\.[^.]\{$maxsenlen\}\." "4e: Avoid run-on sentences" #Shee
 ## Section 5: Enhancing punctuation
 	# 5a:  Commas and periods go inside end quotes, except when there is a parenthetical reference afterward.
 insed "s/\",/,\"/g" 
-insed "s/,\"\(\\b\?\\\cite{[^{}]}\)/\"\1,/g" 
+insed 's/,"\(\\cite{[^\{\}]*}\)/"\1,/g' 
 	# 5b: colons and semicolons go outside end quotes
 insed "s/\([;:]\)\"/\"\1/g"
 	# 5c: A semicolon connects two independent clauses OR separates items when the list contains internal punctuation. (OOS: grammar processing)
@@ -323,7 +333,8 @@ insed "s/\(twenty\|thirty\|forty\|fifty\|sixty\|seventy\|eighty\|ninety\) \(one\
 insed "s/\(self\|all\|ex\) \(\\w\+\\b\)/\1-\2/g" # All words to prefixes ex self all  
 insed "s/\(\\b\\w\+\) elect/\1-elect/g" # Words to suffix -elect
 	# 5 misc: General punctuation goes after citations
-insed "s/\"\([.;:?!]\)\(\\b\?\\\cite{[^{}]}\)/\"\2\1/g" 
+#insed "s/\"\([.;:?!]\)\(\\b\?\\\cite{[^{}]}\)/\"\2\1/g" 
+insed 's/\([.;:?!]\)\(\b\?\\cite{[^\{\}]*}\)/\2\1/g'
 
 ## Section 6: Using Latin
 	# 6a: The Latin abbreviations viz., i.e., and e.g. should all have commas before and after them (e.g., "We can classify a large star as a red giant, e.g., Stephenson 2-18").
@@ -357,7 +368,7 @@ fi
 ## Section 8: Enhancing Math
 	# 8a: Define all variables with units. If unitless, indicate this is the case `$[-]$`. (OOS: universally identifying variables)
 	# 8b: Subscripts should be brief and can be avoided with common notation. For example, `$\dot{m}$` is better than `$m_f$` which is superior to `$m_{flow}$`.
-hladd -c "$restruct" "_{[^{}]}" "8b: Subscripts should be brief and can be avoided with common notation. For example, \`\$\dot{m}\$\` is better than \`\$m_f\$\` which is superior to \`\$m_{flow}\$\`."
+hladd -c "$restruct" "_{[^\{\}]*}" "8b: Subscripts should be brief and can be avoided with common notation. For example, \`\$\dot{m}\$\` is better than \`\$m_f\$\` which is superior to \`\$m_{flow}\$\`."
 	# 8c: Variable names should be symbols rather than words `m` is better than `mass` and `\ksi` is better than `one_time_use_variable`. (OOS: identifying words that are variables)
 	# 8d: The notation `$3.0\times10^{12}$` is preferred over `$3e12$`.
 insed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" 
