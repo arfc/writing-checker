@@ -302,7 +302,7 @@ for i in ${!elem_symblist[@]}; do # iterate through each row of element data (sy
 		insed "s/}$lower/}$symb/g" # Replace instances that are right after a }, since these are likely math / symbols
 	fi
 	# Make sure only elements at the start of sentences are capitalized (period end of sentence)
-	insed -E "s/([^.]{4})$lower/\1$lower/gI"
+	insed -E "s/([^.]{4})($name)/\1\u\2/gI"
 done
 	# 4d: Do not use the word "where" unless referring to a location (try "such that," or "in which").
 hladd -c "$posdel" "where" "4d: Do not use the word 'where' unless referring to a location (try 'such that' or 'in which')." # TODO: improve with lookaheads
