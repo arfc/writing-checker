@@ -23,6 +23,17 @@ When the target files are in the input directory, navigate to the main directory
 
 The script will generate two copies of the LaTeX source, in the subdirectories `output/edit/` and `output/diff`. The edit is a copy of the source with all possible changes applied to it, to be used or previewed. The diff is a copy of the source which uses latexdiff to show each change that was made. The diff also shows highlighted suggestions for more modifications, which couldn't automatically be performed.
 
+
+In a LaTeX repository, some utility files may not be intended for show,like an `acros.tex` file for the acro package. The script can be told to ignore such files by including a `.checkignore` file with the names of files to ignore. For example, in the above situation, the file might look like the following:
+
+```
+#Files to ignore go below. Lines starting with # are treated as comments.
+acros.tex
+```
+The script would then avoid editing or highlighting any file named `acros.tex` in the repository.
+
+The file `.checkignore` should be placed in the first level of the input directory. E.g., if using the default input of `./input/`, the script will check `./input/.checkignore` for files to ignore. If a directory `my_thesis` were given (`bash w_check.sh 'my_thesis/'`), it would check for the respective `./my_thesis/.checkignore`
+
 ## Repository Overview
 
 The repository contains the script and a basic input example.
