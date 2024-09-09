@@ -21,7 +21,7 @@ fi
 
 # Handle edits on a directory by directory basis. Files in the input directory will be copied to mirroring file locations in the directories output/edit and output/diff
 
-if [ ! "$1" == "" ]; then #If a filepath is specified, use that filepath instead
+if [ ! "$1" == "" ] ; then #If a filepath is specified, use that filepath instead
 	input_dir=$(echo "$1" | sed 's%\([^/]\)$%\1/%') #Ensure a / at the end
 	edit_dir=$(echo "$input_dir" | sed 's%/$%_output/edit/%') #Use <path>_output instead of output
 	diff_dir=$(echo "$input_dir" | sed 's%/$%_output/diff/%') 
@@ -44,9 +44,23 @@ mkdir -p "$diff_dir"
 
 #touch $output_full
 echo "$edit_dir$(basename fingu/notresults.tex)"
-#find "$input_dir" -type f -exec sh -c 'echo ${edit_dir}$(echo $input_dir)' \; 
+
+#List of all the files in the source
 files=$(find "$input_dir" -type f -exec echo {} \; | grep -v "Zone\.Identifier$" | sed "s%^$input_dir%%g")
-#echo "$texfiles"
+
+#Files in the source to ignore / not edit or highlight, in the form of a BRE regex pattern that matches them
+ignorefile_path="${input_dir}.checkignore"
+touch "$ignorefile_path"
+ignore_files="^\(.*[/\]\)*\($(cat "$ignorefile_path" | grep -v "^#" | sed 's/\./\\./g' | sed 's/\*/\.\*/g' | tr '\n' '|' | sed 's/|$/\n/g;s/|/\\|/g')\)$"
+#One pattern goes to the edit dir, one to the diff dir
+ign_pattern_edit="^$edit_dir$ignore_files"
+ign_pattern_diff="^$diff_dir$ignore_files"
+#echo "$ign_pattern_edit"
+#echo "$ign_pattern_diff"
+echo "$ignore_files"
+#exit
+
+
 OIFS="$IFS"
 #while IFS=$'\n' read -ra FILES <<< "$texfiles"; do
 #	for file in "${FILES[@]}" ; do
@@ -93,8 +107,8 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 	OPTSTRING=":dDPEBC"
 	while getopts ${OPTSTRING} opt; do
 		case ${opt} in 
-			d) to_build='d';;# Take input as pattern, and simply delete
-			D) to_build='D';;#Take input as pattern, and replace with next character up to 4 spaces away
+			d) to_build='d';; # Take input as pattern, and simply delete
+			D) to_build='D';; #Take input as pattern, and replace with next character up to 4 spaces away
 			B) re_mode='B';; #BRE
 			E) re_mode='E';; #ERE
 			P) re_mode='P';; #PCRE		
@@ -140,9 +154,9 @@ function insed () { #Argument 1: The sed command to run; Available flags: -P and
 	echo "final pattern: $pattern"	
 	# Run the final pattern, with the desired RE engine, across the full edit directory TODO: 
 	case ${re_mode} in
-		B)find "$edit_dir" -type f -name "*.tex" -exec sed -i -e "$pattern" {} \; ;; #BRE
-		E)find "$edit_dir" -type f -name "*.tex" -exec sed -i -E -e "$pattern" {} \; ;; #ERE
-		P)find "$edit_dir" -type f -name "*.tex" -exec perl -i -p -e "$pattern" {} \; ;; #PCRE
+		B)find "$edit_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec sed -i -e "$pattern" {} \; ;; #BRE
+		E)find "$edit_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec sed -i -E -e "$pattern" {} \; ;; #ERE
+		P)find "$edit_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec perl -i -p -e "$pattern" {} \; ;; #PCRE
 	esac
 }
 
@@ -325,7 +339,7 @@ insed "s/\([;:]\)\"/\"\1/g"
 insed "s/\(\(,[^.,;]\+\)\{2,\}\) and/\1, and/g" #TODO: should this be left to highlighting
 	# 5f: Use hyphens to join words acting as a single adjective before a noun (e.g., "well-known prankster"), not after a noun (e.g., "the prankster is well known"). (OOS: grammar provessing)
 	# 5g: Two words joined by a hyphen in title case should both be capitalized.
-hladd -c "$misuse" "[A-Z][a-zA-Z0-9]*-[a-zA-Z0-9]*" "5g: Two words joined by a hyphen in title case should both be capitalized." 
+#hladd -c "$misuse" "[A-Z][a-zA-Z0-9]*-[a-z]\{1,\}" "5g: Two words joined by a hyphen in title case should both be capitalized." 
 	# 5h: Hyphens join a prefix to a capitalized word, figure, or letter (e.g., pre-COVID, T-cell receptor, post-1800s); compound numbers (e.g., sixty-six); words to the prefixes ex, self, and all (e.g., ex-sitter, self-made, all-knowing); and words to the suffix elect (e.g., president-elect).
 insed "s/\(pre\|post\) \([A-Z0-9]\)/\1-\2/g" # prefixes to capitalized words, figures, letters
 #insed "s/\(\\b[A-Za-z]\) \(\)"	 # Letters as prefixes (e.g. T-Cell) TODO: work out avoidance of regular letters like a, I, while still being broad enough to work
@@ -462,15 +476,16 @@ do
 		#note=$(echo "$note" | sed "s/^#/\\\#/g;s/\([^\\]\)#/\1\\\#/g") #Since using hashtags as delimiters, make sure any hashtags in the note are escaped
 		case "${mode}" in
 			[bB]) #BRE
-				find "$diff_dir" -type f -name "*.tex" -exec sed -i "s#\($instr\)#\\\colorbox{$hl_color}{\1}$note#g" {} \;
+
+				find "$diff_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec sed -i "s#\($instr\)#\\\colorbox{$hl_color}{\1}$note#g" {} \;
 				;;
 			[pP]) #PCRE
 				note=$(echo "$note" | sed 's/\([{}]\)/\\\1/g' ) #If not BRE, need to escape the brackets
-				find "$diff_dir" -type f -name "*.tex" -exec perl -i -p -e "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
+				find "$diff_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec perl -i -p -e "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
 				;;
 			[eE]) #ERE
 				note=$(echo "$note" | sed 's/\([{}]\)/\\\1/g' ) #If not BRE, need to escape the brackets
-				find "$diff_dir" -type f -name "*.tex" -exec sed -i -E "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
+				find "$diff_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec sed -i -E "s#($instr)#\\\colorbox\{$hl_color\}\{\1\}$note#g" "$diffile"
 				;;
 		esac
 		#Reset to default color and mode
@@ -488,7 +503,7 @@ for ((i=0;i<num_notes;i++)); do
 	temp_ID="$(bpmf_armn_id $i)"
 	#Find instances of that temporary id and replace with the original note text
 	noteText=$(echo "$noteText" | sed "s/^#/\\\#/g;s/\([^\\]\)#/\1\\\#/g") #Since using hashtags as delimiters, make sure any hashtags in the note are escaped
-	find "$diff_dir" -type f -name "*.tex" -exec sed -i "s#$temp_ID#$noteText#g" {} \; #Go through each file and replace instances of that id with the original text
+	find "$diff_dir" -type f -name "*.tex" ! -regex "$ignore_files" -exec sed -i "s#$temp_ID#$noteText#g" {} \; #Go through each file and replace instances of that id with the original text
 	echo "Replacing id $temp_ID with original text: $noteText"
 done
 
