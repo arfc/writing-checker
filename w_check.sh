@@ -385,7 +385,11 @@ fi
 hladd -c "$restruct" "_{[^\{\}]*}" "8b: Subscripts should be brief and can be avoided with common notation. For example, \`\$\dot{m}\$\` is better than \`\$m_f\$\` which is superior to \`\$m_{flow}\$\`."
 	# 8c: Variable names should be symbols rather than words `m` is better than `mass` and `\ksi` is better than `one_time_use_variable`. (OOS: identifying words that are variables)
 	# 8d: The notation `$3.0\times10^{12}$` is preferred over `$3e12$`.
-insed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" 
+insed -E 's/([^0-9a-f])([0-9a-f]{6}([0-9a-f]{2})?)([^0-9a-f])/\1ㄏㄎ\2\4/gI' #Mark items which are hex codes, specifically 6 or 8 hex characters surrounded by non-hex characters
+insed -E 's/(ㄏㄎ[0-9a-f]{0,7})(e)/\1ㄜ\2/giI' #Put a character in front of e's in hex codes, so the scientific notation replacer won't check it
+insed "s/\([0-9]\)e\([0-9]\+\)/\1\\\times10\^{\2}/g" #Replace non-avoided e notation with full scientific notation
+insed -E 's/(ㄏㄎ[0-9a-z]{0,7})ㄜ/\1/gI' #Remove the non-scinote e marker
+insed -E 's/ㄏㄎ([0-9a-f]{6})/\1/gI' #Remove the hex code marker
 	# 8e: Equations should be part of a sentence.
 hl_color='brown'
 insed "s/\(\\\begin{\(equation\|align\|gather\|multiline\)[*]\+}\)\(*\)\(\\\end{\2\)/\1\\\colorbox{$hl_color}{\$\\\displaystyle \3\$}\4/g" #Special highlight needed to respect math environment; this highlights equations which come right after a period
