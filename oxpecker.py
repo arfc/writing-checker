@@ -7,13 +7,21 @@ import argparse
 
 DEFAULT_INPUT:str = './input/'
 DEFAULT_OUTPUT:str = './output/'
+
 #Step 0: Identify what set of files are being operated on
 # args = sys.argv
 parser = argparse.ArgumentParser()
 parser.add_argument('-p', '--path', help="Path to input folder. If unspecified, looks for a folder 'input'")
+parser.add_argument('-v', '--verbose', action='store_true', help="Whether to print more extensive information about the operation")
 args = parser.parse_args()
 
-input_path:StopAsyncIteration
+verbose:bool = args.verbose
+#Method to print only if verbose printing is desired
+def vprint(*printable):
+    if verbose:
+        print(*printable)
+
+input_path:str
 if (args.path is None): #No input directory specified
     print("No input path specified, using directory './input/'")
     input_path = DEFAULT_INPUT
@@ -21,12 +29,12 @@ else:
     input_path = './' + args.path
     if not input_path[-1] == '/':
         input_path = input_path + '/'
-print("Operating on files in path: " + input_path)
+vprint("Operating on files in path: " + input_path)
 if (not os.path.isdir(input_path)):
     print(f"Path '{input_path}' not found, exiting.")
     exit()
-print("Files in directory: ",glob.glob(input_path+'*'))
-print("TeX files in directory: ", glob.glob(input_path+'**/*.tex', recursive=True))
+vprint("Files in directory: ",glob.glob(input_path+'*'))
+vprint("TeX files in directory: ", glob.glob(input_path+'**/*.tex', recursive=True))
 
 # Set up output directories
 if input_path == DEFAULT_INPUT:
@@ -35,7 +43,7 @@ else:
     output_path = input_path[:len(input_path)-1] + '_pecked/'
 diff_path = output_path + "diff/"
 edit_path = output_path + "edit/"
-print(f"Sending edits to '{edit_path}', diffs to '{diff_path}'")
+vprint(f"Sending edits to '{edit_path}', diffs to '{diff_path}'")
 
 #TODO: Set up a walker to build a list of all the input files to traverse
 
