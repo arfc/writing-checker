@@ -57,7 +57,6 @@ shutil.copytree(input_path, edit_path, dirs_exist_ok=True)
 path_prefix:re.Pattern = re.compile(rf'^{input_path}')
 for i in range(len(all_paths)):
     editpath:str = re.sub(path_prefix, output_path, all_paths[i])
-    # print(f"Copying to: {newpath}")
 
 edit_tex_paths:list[str] = []
 diff_tex_paths:list[str] = []
@@ -97,18 +96,17 @@ class TexEdit():
             
             #If node is of a recursive kind, recursively call on each of its nodes
             if hasattr(node, 'nodelist'):
-                self.iterate_nodes(node.nodelist, method, context=new_context, path=path, run_method_on_types=run_method_on_types) # type: ignore
+                self.iterate_nodes(node.nodelist, method, context=new_context, path=path, run_method_on_types=run_method_on_types)
             #Macro nodes can also sometimes have recursive nodes, but its tricky
             if node_type == plw.LatexMacroNode:
                 m_node:plw.LatexMacroNode = node
                 args:plms.ParsedMacroArgs = m_node.nodeargd
                 if not args is None:
-                    self.iterate_nodes(args.argnlist, method, context=new_context, path=path, run_method_on_types=run_method_on_types) # type: ignore
+                    self.iterate_nodes(args.argnlist, method, context=new_context, path=path, run_method_on_types=run_method_on_types)
 
     def sync_charsnode_changes(self, nodes:list[plw.LatexNode], changed_node:plw.LatexCharsNode):
         old_fullraw = changed_node.parsing_state.s
         new_fullraw = old_fullraw[:changed_node.pos] + changed_node.chars + old_fullraw[changed_node.pos+changed_node.len:]
-        print("NEW FULLRAW: {{",new_fullraw,"}}")
 
         changed_node.parsing_state.s = new_fullraw
 
@@ -172,28 +170,18 @@ class RegexEdit(TexEdit):
                     if not p_type in self.allowed_nodes:
                         return
                 
-                # vprint("Initial text: ",node.chars,", in: ",parent_types)  
                 node.chars = re.sub(self.pattern, self.replace, node.chars)
                 self.sync_charsnode_changes(nodes,  node)
                 
-                # prev_string = node.parsing_state.s
-                # new_string = prev_string[:node.pos] + node.chars + prev_string[node.pos+node.len:]
-                # node.parsing_state.s = new_string
-                # vprint("New text:",node.chars)
-                
 
-        
             self.iterate_nodes(nodes, edit_node)
 
             updated_raw:str = ""
             for base_node in nodes:
-                vprint(base_node)
                 updated_raw += base_node.latex_verbatim()
             
             with open(path, 'w') as tex_file:
-                print(updated_raw)
                 tex_file.write(updated_raw)
-                # print("Wrote to: ",path)
             
             
             
