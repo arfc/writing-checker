@@ -56,13 +56,16 @@ shutil.copytree(input_path, edit_path, dirs_exist_ok=True)
 
 path_prefix:re.Pattern = re.compile(rf'^{input_path}')
 for i in range(len(all_paths)):
-    newpath:str = re.sub(path_prefix, output_path, all_paths[i])
+    editpath:str = re.sub(path_prefix, output_path, all_paths[i])
     # print(f"Copying to: {newpath}")
 
 edit_tex_paths:list[str] = []
+diff_tex_paths:list[str] = []
 for path in tex_paths:
-    newpath:str = re.sub(path_prefix, edit_path, path)
-    edit_tex_paths.append(newpath)
+    editpath:str = re.sub(path_prefix, edit_path, path)
+    diffpath:str = re.sub(path_prefix, diff_path, path)
+    edit_tex_paths.append(editpath)
+    diff_tex_paths.append(diffpath)
 
 vprint(edit_tex_paths)
 
@@ -200,9 +203,16 @@ edits.append(RegexEdit(r'e', r'EE'))
 for edit in edits: 
     edit.edit_files(edit_tex_paths, edit_tex_paths)
 
-
-
-            
+if not (len(edit_tex_paths) == len(diff_tex_paths) and len(edit_tex_paths) == len(tex_paths)):
+    print("Edit tex paths were different than diff tex paths or base tex paths", edit_tex_paths, diff_tex_paths, tex_paths)
+    exit()
+for i in range(len(tex_paths)):
+    b_path = tex_paths[i]
+    e_path = edit_tex_paths[i]
+    d_path = diff_tex_paths[i]
+    command:str = f"latexdiff '{b_path}' '{e_path}' > '{d_path}'"
+    print(command)
+    os.system(command)
 
 
 #TODO: Set up a walker to build a list of all the input files to traverse
