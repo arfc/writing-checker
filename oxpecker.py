@@ -53,6 +53,7 @@ diff_path = output_path + "diff/"
 edit_path = output_path + "edit/"
 vprint(f"Sending edits to '{edit_path}', diffs to '{diff_path}'")
 shutil.copytree(input_path, edit_path, dirs_exist_ok=True)
+shutil.copytree(input_path, diff_path, dirs_exist_ok=True)
 
 path_prefix:re.Pattern = re.compile(rf'^{input_path}')
 for i in range(len(all_paths)):
@@ -68,10 +69,14 @@ for path in tex_paths:
 
 vprint(edit_tex_paths)
 
+#Integer tags for whether an edit should modify edit files or diff files
+NO_FILES:int = 0
+EDIT_FILES:int = 1
+DIFF_FILES:int = 2
 class TexEdit():
-    @abstractmethod
+
     def edit_files(paths:list[str], tex_paths:list[str]):
-        pass
+        raise NotImplementedError("TexEdit implementation should specify how files are to be edited")
 
     '''
     A method to recursively iterate through the provided nodes, running the given method with each node and prior context as parameters
@@ -134,25 +139,30 @@ class TexEdit():
                 if not args is None:
                     self.shift_nodes(args.argnlist, start_idx, amount)
 
-class TexDiffEdit():
-    @abstractmethod
-    def edit_diff_files(paths:list[str], tex_paths:list[str]):
-        pass
+    def is_highlight() -> bool:
+        return False
+
 
 
 class RegexEdit(TexEdit):
-
+    DEFAULT_ALLOWED_NODES:list = [plw.LatexCharsNode, plw.LatexGroupNode, plw.LatexEnvironmentNode]
+    DEFAULT_ALLOWED_ENVS:list[str] = ['document', 'center', 'left', 'justified', 'right']
+    
     
 
-    def __init__(self, pattern:str, replace:str, allowed_envs:list[str]=[""], allowed_nodes:list=[] ):
-        DEFAULT_ALLOWED_NODES:list = [plw.LatexCharsNode, plw.LatexGroupNode, plw.LatexEnvironmentNode]
-        DEFAULT_ALLOWED_ENVS:list[str] = ['document', 'center', 'left', 'justified', 'right']
-
+    def __init__(self, pattern:str, replace:str, allowed_envs:list[str]=[""], allowed_nodes:list=[], forbidden_nodes:list=None):
         self.pattern = pattern
         self.replace = replace
         self.allowed_envs = allowed_envs
         self.allowed_nodes = allowed_nodes
-        self.allowed_nodes.extend(DEFAULT_ALLOWED_NODES)
+        self.allowed_nodes.extend(RegexEdit.DEFAULT_ALLOWED_NODES)
+
+        #Screening mode: by default, operates on a whitelist, where only listed nodes are allowed. If 'blacklist' is true, operates on a blacklist, where anything is allowed except for certain specified nodes
+        if forbidden_nodes is None:
+            self.blacklist:bool = False
+        else:
+            self.blacklist:bool = True
+            self.forbidden_nodes = forbidden_nodes
         
     #Makes new walker every time, because each edit should incorporate previous edit's changes
     def edit_files(self, paths, tex_paths):
@@ -163,11 +173,10 @@ class RegexEdit(TexEdit):
             nodes:list[plw.LatexNode] = walker.get_latex_nodes()[0]
 
             def edit_node(node:plw.LatexCharsNode, context:list[plw.LatexNode]):
-                parent_types:list = []
                 for parent in context:
-                    parent_types.append(parent.nodeType())
-                for p_type in parent_types:
-                    if not p_type in self.allowed_nodes:
+                    p_type = (parent.nodeType())
+                    # Make sure that all parental nodes are allowed, either by using a whitelist or a blacklist
+                    if ((not self.blacklist) and not p_type in self.allowed_nodes) or (self.blacklist and p_type in self.forbidden_nodes):
                         return
                 
                 node.chars = re.sub(self.pattern, self.replace, node.chars)
@@ -182,8 +191,17 @@ class RegexEdit(TexEdit):
             
             with open(path, 'w') as tex_file:
                 tex_file.write(updated_raw)
-            
-            
+
+# An extension of RegexEdit which specifically adds a colorbox highlight and a footnote to mark things that should be corrected, but can't be automatically
+# By default, uses a blacklist instead of a whitelist, to forbid DIFdel nodes
+class RegexHighlight(RegexEdit):
+    def __init__(self, pattern:str, color:str, note:str=None, allowed_envs = [""], allowed_nodes = [], forbidden_nodes = ["DIFdel"]):
+        pattern = '('+pattern+')'
+        replace = r'\\colorbox{'+color+r'}{\1}'
+        if not note is None:
+            replace = replace +r'\\footnote{'+note+r'}'
+        super().__init__(pattern, replace, allowed_envs, allowed_nodes)
+
             
 edits:list[TexEdit] = []
 edits.append(RegexEdit(r'e', r'EE'))
@@ -198,11 +216,17 @@ for i in range(len(tex_paths)):
     b_path = tex_paths[i]
     e_path = edit_tex_paths[i]
     d_path = diff_tex_paths[i]
+
     command:str = f"latexdiff '{b_path}' '{e_path}' > '{d_path}'"
     print(command)
     os.system(command)
 
+#TODO: Take each diff file, temporarily remove all diff marked elements, and then run highlight edits on the remaining text before substituting back
+diff_edits:list[TexEdit] = []
+diff_edits.append(RegexHighlight(r'hEE', 'red', 'is now the best time to HEEHEE?'))
 
+for diff_edit in diff_edits:
+    diff_edit.edit_files(diff_tex_paths, diff_tex_paths)
 #TODO: Set up a walker to build a list of all the input files to traverse
 
 #TODO: Utility function to use latexwalker and control edits in/out of math or other environments
