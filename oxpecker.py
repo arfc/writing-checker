@@ -231,9 +231,13 @@ def add_edit(pattern:str, replace:str, allowed_envs:list[str]=[""], allowed_node
             new_repl:str = replace
             for i in range(10): #For each possible capture group 0-9
                 #First, check for capitalized versions
-                new_repl = new_repl.replace(capital_char+f"\\{i}", m.group(i).upper())
+                capital_group:str = capital_char+f"\\{i}"
+                if (capital_group in new_repl):
+                    new_repl = new_repl.replace(capital_char+f"\\{i}", m.group(i).upper())
                 #Then, substitute any uncapitalized ones
-                new_repl = new_repl.replace(f"\\{i}", m.group(i))
+                reg_group:str = f"\\{i}"
+                if (reg_group in new_repl):
+                    new_repl = new_repl.replace(f"\\{i}", m.group(i))
             return new_repl
 
         edits.append(RegexEdit(upper_pat, upper_rep, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
