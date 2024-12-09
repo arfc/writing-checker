@@ -247,17 +247,17 @@ def add_edit(pattern:str, replace:str, allowed_envs:list[str]=[""], allowed_node
         
 
 def highlight(pattern:str, color:str, note:str=None, allowed_envs = [""], allowed_nodes = [], forbidden_nodes = ["DIFdel", "footnote", "colorbox"]):
-    edits.append(RegexHighlight(pattern, color, note=note, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
+    diff_edits.append(RegexHighlight(pattern, color, note=note, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
 
 # Style guide & highlight colors: 
 #  - red for things that should be removed, but can't automatically do so
-#  - purple for likely passive voice (both in general but also stuff like "there are people who believe" instead of "some people believe"
+#  - purple for likely passive voice, or otherwise strengthening statements (stuff like "there are people who believe" instead of "some people believe", or using a better word instead of "very [x]")
 #  - pink for things that should be removed, but can't reliably be identified
 #  - brown for weird things that could use restructuring
 #  - teal for things that are frequently misused (i.e large with something not about size, when with something not about time, words like code input output, verbs with data, or miscapitalization, or mistyping latin expressions)
 DELETE='red'
-PASSIVE='violet'
-POSDEL='pink'
+PASSIVE_WEAK='violet'
+POSSIBLY_DELETE='pink'
 RESTRUCT='brown'
 MISUSE='teal'
 
@@ -276,7 +276,23 @@ add_edit(r'((happen|occur[r]?)(ed|s)?|took|take[sn]?) on ([^.,]*(century|decade|
 with open('irregular_passive_verbs_ERE.txt', 'r') as irreg_file:
     irreg = irreg_file.read().replace('\n','')
     print(irreg)
-highlight(fr'\b(am|are|were|being|is|been|was|be)\b([a-zA-Z]+(ed)|{irreg})\b', PASSIVE, note="1e: Get rid of passive voice constructions")
+highlight(fr'\b(am|are|were|being|is|been|was|be)\b([a-zA-Z]+(ed)|{irreg})\b', PASSIVE_WEAK, note="1e: Get rid of passive voice constructions")
+    # 1f: Cite all images, methods, software, and empirical data (Currently out of scope)
+
+## Section 2: Enhancing clarity
+	# 2a: Be concise and direct (Out of Scope, unless we gather a bunch more specific examples of fluff)
+    # 2b: Using "very" suggest that a better word exists; replace it where possible
+highlight(r'\b[Vv]ery\b', PASSIVE_WEAK, note="2b: Using 'very' suggest that a better word exists; replace it where possible")
+    # 2c: Make sure that articles such as a, the, some, any, and each appear where necessary (Out of Scope: define where is necessary)
+	# 2d: Ensure all subjects match the plurality of their verbs ("Apples is tasty" to "Apples are tasty") (Not Yet in Scope: define plurals)
+	# 2e: Recover noun-ified verbs ('obtain estimates of' -> 'estimates')
+highlight(r'(obtain|provide|secure|allow|enable)(s|ed)?( [^ .]*){1,3} (of|for)', PASSIVE_WEAK, "2e:  Recover noun-ified verbs ('obtain estimates of' -> 'estimates')")
+    # 2f: Use the form <noun> <verb>ion over <verb>ion of <noun> (for example, convert "calculation of velocity" to "velocity calculation").
+highlight(r'[a-z]ion of\b', PASSIVE_WEAK, note="2f: Use the form <noun> <verb>ion over <verb>ion of <noun> (for example, convert 'calculation of velocity' to 'velocity calculation').")
+    # 2g: Reduce vague words like important or methodologic (TODO: Add more such salt and pepper words)
+highlight(r'(various|a number of|many|quite a few|methodologic(al)?|important)', DELETE, note="2g: Reduce vague words like important or methodologic (TODO: Add more such salt and pepper words)")
+
+
 
 for edit in edits: 
     edit.edit_files(edit_tex_paths, edit_tex_paths)
