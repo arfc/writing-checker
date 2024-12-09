@@ -195,16 +195,84 @@ class RegexEdit(TexEdit):
 # An extension of RegexEdit which specifically adds a colorbox highlight and a footnote to mark things that should be corrected, but can't be automatically
 # By default, uses a blacklist instead of a whitelist, to forbid DIFdel nodes
 class RegexHighlight(RegexEdit):
-    def __init__(self, pattern:str, color:str, note:str=None, allowed_envs = [""], allowed_nodes = [], forbidden_nodes = ["DIFdel"]):
+    def __init__(self, pattern:str, color:str, note:str=None, allowed_envs = [""], allowed_nodes = [], forbidden_nodes = ["DIFdel", "footnote", "colorbox"]):
         pattern = '('+pattern+')'
         replace = r'\\colorbox{'+color+r'}{\1}'
         if not note is None:
             replace = replace +r'\\footnote{'+note+r'}'
-        super().__init__(pattern, replace, allowed_envs, allowed_nodes)
+        super().__init__(pattern, replace, allowed_envs, forbidden_nodes=forbidden_nodes)
 
-            
+# Main list of edits, organized alongside the checklist    
 edits:list[TexEdit] = []
-edits.append(RegexEdit(r'e', r'EE'))
+diff_edits:list[TexEdit] = []
+
+#Methods to quickly add the most common edits to the stack
+'''
+A method to more efficiently add RegexEdits to the edit stack.
+
+Parameters:
+- pattern: the regex pattern string for the edit to use (if not using the capitalization feature of this function, this can be a precompiled regex pattern)
+- replace: the regex replace string for the pattern to substitute (if not using the capitalization feature of this function, this can be an arbitrary replace function)
+- allowed_envs, allowed_nodes, forbidden_nodes: Arguments identical to those of RegexEdit, which specify where this edit can take place. See RegexEdit for how these are specfically applied
+
+To add capitalizations, pass a character such as '#' as parameter "capital_char":
+- Put that character in front of the character in the (lowercase) character to match hypothetical capitalization of
+- Put that character in front of the/each group in the replace string that should subsequently be capitalized if the pattern's character(s) is/are capitalized
+- E.g.: 
+    - (r'#it follows that (.)', r'#\1') to replace "...end. It follows that you can read" with "...end. You can read", or "so it follows that you" with "so you"
+    - (r'#it follows that (...)', r'#\1') to replace "...end. It follows that you can read" with "...end. YOU can read"
+    - (r'#it follows that (.)(..)', r'#\1\2') to replace "...end. It follows that you can read" with "...end. You can read"
+    - (r'#i#t follows that (.)(.)', r'#\1#\2') to replace "...end. IT follows that you can read" with "...end. YOu can read", but not replace "...end. It follows that you can read" with "...end. YOu can read"
+'''
+def add_edit(pattern:str, replace:str, allowed_envs:list[str]=[""], allowed_nodes:list=[], forbidden_nodes:list=None, capital_char:str=None):
+    if (not capital_char is None):
+        upper_pat = re.sub(fr'{capital_char}([a-z])',lambda m: m.group(1).upper(), pattern)
+        def upper_rep(m):
+            new_repl:str = replace
+            for i in range(10): #For each possible capture group 0-9
+                #First, check for capitalized versions
+                new_repl = new_repl.replace(capital_char+f"\\{i}", m.group(i).upper())
+                #Then, substitute any uncapitalized ones
+                new_repl = new_repl.replace(f"\\{i}", m.group(i))
+            return new_repl
+
+        edits.append(RegexEdit(upper_pat, upper_rep, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
+        edits.append(RegexEdit(pattern.replace(capital_char,''), replace.replace(capital_char,''), allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
+    else:
+        edits.append(RegexEdit(pattern, replace, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
+        
+
+def highlight(pattern:str, color:str, note:str=None, allowed_envs = [""], allowed_nodes = [], forbidden_nodes = ["DIFdel", "footnote", "colorbox"]):
+    edits.append(RegexHighlight(pattern, color, note=note, allowed_envs=allowed_envs, allowed_nodes=allowed_nodes, forbidden_nodes=forbidden_nodes))
+
+# Style guide & highlight colors: 
+#  - red for things that should be removed, but can't automatically do so
+#  - purple for likely passive voice (both in general but also stuff like "there are people who believe" instead of "some people believe"
+#  - pink for things that should be removed, but can't reliably be identified
+#  - brown for weird things that could use restructuring
+#  - teal for things that are frequently misused (i.e large with something not about size, when with something not about time, words like code input output, verbs with data, or miscapitalization, or mistyping latin expressions)
+DELETE='red'
+PASSIVE='violet'
+POSDEL='pink'
+RESTRUCT='brown'
+MISUSE='teal'
+
+# add_edit(r'e', r'EE')
+# highlight(r'hEE', 'red', 'is now the best time to HEEHEE?')
+
+## Section 1: Reviewing Writing
+	# 1a: Spell Checker (Out of scope)
+	# 1b: Get rid of unnecessary propositional phrases -- author clearing throat
+add_edit(r'#it (follows|can be shown|seems|seems reasonable|is evident|is apparent|happens|occurs) that[,]?[ ]+(.)', r'#\2', capital_char='#')
+    # 1c: Get rid of there are/there is
+highlight(r'there (is|are|exist[s]?|(can|may) be)', DELETE, note="1c: Get rid of there are/there is")
+    # 1d: Extraneous prepositions
+add_edit(r'((happen|occur[r]?)(ed|s)?|took|take[sn]?) on ([^.,]*(century|decade|year|month|week|day|hour|minute|second))', r'\1 \4')
+    # 1e: Get rid of passive voice constructions
+with open('irregular_passive_verbs_ERE.txt', 'r') as irreg_file:
+    irreg = irreg_file.read().replace('\n','')
+    print(irreg)
+highlight(fr'\b(am|are|were|being|is|been|was|be)\b([a-zA-Z]+(ed)|{irreg})\b', PASSIVE, note="1e: Get rid of passive voice constructions")
 
 for edit in edits: 
     edit.edit_files(edit_tex_paths, edit_tex_paths)
@@ -221,16 +289,5 @@ for i in range(len(tex_paths)):
     print(command)
     os.system(command)
 
-#TODO: Take each diff file, temporarily remove all diff marked elements, and then run highlight edits on the remaining text before substituting back
-diff_edits:list[TexEdit] = []
-diff_edits.append(RegexHighlight(r'hEE', 'red', 'is now the best time to HEEHEE?'))
-
 for diff_edit in diff_edits:
     diff_edit.edit_files(diff_tex_paths, diff_tex_paths)
-#TODO: Set up a walker to build a list of all the input files to traverse
-
-#TODO: Utility function to use latexwalker and control edits in/out of math or other environments
-#TODO: Highlighting and editing functions analogous to original bash, in more open ended framework (and using utility/walker function to control applicable environments)
-#TODO: Highlights and edits organized like the checklist, as in original bash
-#TODO: Generate diff files
-#TODO: Perform highlights on diff files, walking and reloading after each highlight to ensure no 
